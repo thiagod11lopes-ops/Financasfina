@@ -7,8 +7,36 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
+import {
+  getAuth,
+  getRedirectResult,
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  signInWithPopup,
+  signInWithRedirect,
+  signOut,
+  type User,
+} from "firebase/auth";
 import { getFirebaseApp, isFirebaseConfigured } from "./config";
+
+/** Em telemóveis o popup costuma falhar (auth/cancelled-popup-request); o redirect é mais fiável. */
+function shouldUseGoogleRedirect(): boolean {
+  if (typeof window === "undefined") return false;
+  if ("ontouchstart" in window) return true;
+  return window.matchMedia("(max-width: 640px)").matches;
+}
+
+function formatAuthError(e: unknown): string {
+  const code =
+    typeof e === "object" && e !== null && "code" in e ? String((e as { code: string }).code) : "";
+  if (code === "auth/cancelled-popup-request") {
+    return "O login foi interrompido (janela fechada ou bloqueada). Tente de novo; em telemóvel use o fluxo que abre a página da Google.";
+  }
+  if (code === "auth/popup-blocked-by-browser") {
+    return "O browser bloqueou a janela de login. Permita pop-ups para este site ou tente noutro browser.";
+  }
+  return e instanceof Error ? e.message : String(e);
+}
 
 type AuthContextValue = {
   configured: boolean;
@@ -39,6 +67,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     const auth = getAuth(app);
+    void getRedirectResult(auth).catch((e: unknown) => {
+      const code =
+        typeof e === "object" && e !== null && "code" in e
+          ? String((e as { code: string }).code)
+          : "";
+      if (code === "auth/no-auth-event") return;
+      console.warn("[Firebase auth redirect]", e);
+    });
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setReady(true);
@@ -55,10 +91,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const auth = getAuth(app);
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
+      if (shouldUseGoogleRedirect()) {
+        await signInWithRedirect(auth, provider);
+        return;
+      }
       await signInWithPopup(auth, provider);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setLastError(msg);
+      setLastError(formatAuthError(e));
     }
   }, [configured]);
 
@@ -70,8 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await signOut(getAuth(app));
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setLastError(msg);
+      setLastError(formatAuthError(e));
     }
   }, [configured]);
 
