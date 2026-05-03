@@ -16,11 +16,25 @@ export default function App() {
       <CloudSyncBadge />
       <main className="app-shell">
         <PageBranding />
-        {tab === "home" && <Dashboard />}
-        {tab === "flow" && <MovementsView />}
-        {tab === "accounts" && <AccountsView />}
-        {tab === "futureIncome" && <FutureIncomesView />}
-        {tab === "settings" && <SettingsView />}
+        {/*
+          Manter todas as vistas montadas: o contexto financeiro e o Firestore atualizam todas
+          ao mesmo tempo; evita perda de rascunhos e estados ao mudar de aba na navegação inferior.
+        */}
+        <section className="app-tab-panel" hidden={tab !== "home"} aria-label="Início">
+          <Dashboard visible={tab === "home"} />
+        </section>
+        <section className="app-tab-panel" hidden={tab !== "flow"} aria-label="Fluxo de caixa">
+          <MovementsView />
+        </section>
+        <section className="app-tab-panel" hidden={tab !== "accounts"} aria-label="Contas">
+          <AccountsView visible={tab === "accounts"} />
+        </section>
+        <section className="app-tab-panel" hidden={tab !== "futureIncome"} aria-label="Entradas futuras">
+          <FutureIncomesView />
+        </section>
+        <section className="app-tab-panel" hidden={tab !== "settings"} aria-label="Ajustes">
+          <SettingsView visible={tab === "settings"} />
+        </section>
       </main>
       <BottomNav active={tab} onChange={setTab} />
     </>

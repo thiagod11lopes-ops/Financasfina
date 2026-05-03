@@ -6,7 +6,7 @@ import { formatBRL, formatShortDate, parseMoney, variableSpendTitleForDate } fro
 
 type Seg = "fixed" | "variable";
 
-export function AccountsView() {
+export function AccountsView({ visible = true }: { visible?: boolean }) {
   const {
     state,
     addFixedAccount,
@@ -242,6 +242,7 @@ export function AccountsView() {
               state.variableAccounts.map((a) => (
                 <VariableRow
                   key={a.id}
+                  panelActive={visible}
                   account={a}
                   onUpdate={updateVariableAccount}
                   onRemove={removeVariableAccount}
@@ -376,12 +377,14 @@ function variableSpendToneClass(
 }
 
 function VariableRow({
+  panelActive,
   account,
   onUpdate,
   onRemove,
   addVariableSpend,
   removeVariableSpend,
 }: {
+  panelActive: boolean;
   account: VariableAccount;
   onUpdate: (id: string, p: Partial<VariableAccount>) => void;
   onRemove: (id: string) => void;
@@ -404,6 +407,13 @@ function VariableRow({
     () => variableSpendToneClass(spendTotal, account.budgetLimit),
     [spendTotal, account.budgetLimit],
   );
+
+  useEffect(() => {
+    if (!panelActive) {
+      setSpendOpen(false);
+      setEditing(false);
+    }
+  }, [panelActive]);
 
   if (editing) {
     return (

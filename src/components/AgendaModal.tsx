@@ -192,6 +192,15 @@ export function AgendaModal({ open, onClose }: Props) {
     onClose();
   }, [cloud, onClose]);
 
+  const prevOpenRef = useRef(open);
+  useEffect(() => {
+    if (prevOpenRef.current && !open) {
+      saveAgenda(dataRef.current);
+      if (cloud.cloudEnabled) cloud.pushAgendaImmediate(dataRef.current);
+    }
+    prevOpenRef.current = open;
+  }, [open, cloud]);
+
   useEffect(() => {
     if (!open) return;
     setData(loadAgenda());

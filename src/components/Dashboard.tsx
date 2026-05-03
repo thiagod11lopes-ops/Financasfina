@@ -27,7 +27,7 @@ function entryDateForMonth(ym: string): string {
   return `${ym}-01`;
 }
 
-export function Dashboard() {
+export function Dashboard({ visible = true }: { visible?: boolean }) {
   const cloud = useUserDocCloud();
   const { state, bootstrapNewMonth, addMovement } = useFinance();
   const [tabs, setTabs] = useState<string[]>(() => loadDashboardTabs().tabs);
@@ -78,6 +78,14 @@ export function Dashboard() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [balanceModalOpen]);
+
+  /** Ao mudar de aba na navegação inferior, fechar modais (scroll do body, foco, etc.). */
+  useEffect(() => {
+    if (visible) return;
+    setPickerOpen(false);
+    setAgendaOpen(false);
+    setBalanceModalKind(null);
+  }, [visible]);
 
   useEffect(() => {
     const payload = { tabs, active: activeKey };

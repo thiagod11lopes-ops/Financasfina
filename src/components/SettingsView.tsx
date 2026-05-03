@@ -25,7 +25,7 @@ import {
 
 const DEFAULT_NEW_COLOR = USER_COLOR_PRESETS[0]!;
 
-export function SettingsView() {
+export function SettingsView({ visible = true }: { visible?: boolean }) {
   const { state, deleteMonthData, resetAllData } = useFinance();
   const { configured: fbOk, ready: authReady, user: fbUser, signInWithGoogle, signOutUser, lastError } = useAuth();
   const cloud = useUserDocCloud();
@@ -46,6 +46,12 @@ export function SettingsView() {
     window.addEventListener(USERS_SYNC_EVENT, sync);
     return () => window.removeEventListener(USERS_SYNC_EVENT, sync);
   }, []);
+
+  useEffect(() => {
+    if (visible) return;
+    setDeletePickerOpen(false);
+    setWipeStep(0);
+  }, [visible]);
 
   const handleDeleteMonthConfirm = useCallback(
     (ym: string) => {
