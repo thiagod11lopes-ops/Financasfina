@@ -6,6 +6,7 @@ import {
   resetDashboardTabsToCurrentMonth,
 } from "../dashboardTabs";
 import { useFinance } from "../context/FinanceContext";
+import { useAuth } from "../firebase/AuthProvider";
 import { countMonthEntries, formatMonthLabelPt, monthKey } from "../utils/format";
 import { MonthYearPickerModal } from "./MonthYearPickerModal";
 import {
@@ -25,6 +26,7 @@ const DEFAULT_NEW_COLOR = USER_COLOR_PRESETS[0]!;
 
 export function SettingsView() {
   const { state, deleteMonthData, resetAllData } = useFinance();
+  const { configured: fbOk, ready: authReady, user: fbUser, signInWithGoogle, signOutUser, lastError } = useAuth();
   const [deletePickerOpen, setDeletePickerOpen] = useState(false);
   const [wipeStep, setWipeStep] = useState<0 | 1>(0);
   const [userRecords, setUserRecords] = useState<UserRecord[]>(() => loadUserRecords());
@@ -95,6 +97,40 @@ export function SettingsView() {
     <>
       <div className="card card-glow settings-card">
         <span className="badge">Ajustes</span>
+        <h3 className="settings-section-title">Sincronização (Firebase)</h3>
+        {!fbOk ? (
+          <p className="settings-muted">
+            Para guardar fluxo, contas e mercado na nuvem, crie um projeto no{" "}
+            <a href="https://console.firebase.google.com/" target="_blank" rel="noreferrer">
+              Firebase Console
+            </a>
+            , ative <strong>Authentication → Google</strong> e <strong>Firestore</strong>, copie as chaves web
+            para um ficheiro <code className="settings-inline-code">.env</code> (veja <code className="settings-inline-code">.env.example</code> na raiz do projeto) e volte a executar <code className="settings-inline-code">npm run dev</code> ou o build.
+          </p>
+        ) : !authReady ? (
+          <p className="settings-muted">A carregar sessão…</p>
+        ) : fbUser ? (
+          <div className="settings-firebase-row">
+            <p className="settings-muted">
+              Conta: <strong>{fbUser.email ?? fbUser.displayName ?? fbUser.uid}</strong>. Os dados financeiros ficam na nuvem (Firestore); ao sair, guarda-se uma cópia no dispositivo para usar sem login.
+            </p>
+            <button type="button" className="settings-btn settings-btn--outline" onClick={() => void signOutUser()}>
+              Sair da conta Google
+            </button>
+          </div>
+        ) : (
+          <div className="settings-firebase-row">
+            <p className="settings-muted">
+              Entre com a mesma conta Google em vários dispositivos para ver os mesmos dados financeiros. A agenda e
+              utilizadores locais continuam só neste aparelho por agora.
+            </p>
+            <button type="button" className="settings-btn settings-btn--primary" onClick={() => void signInWithGoogle()}>
+              Entrar com Google
+            </button>
+          </div>
+        )}
+        {lastError ? <p className="settings-firebase-error">{lastError}</p> : null}
+
         <h3 className="settings-section-title">Usuários responsáveis</h3>
         <p className="settings-muted">
           Cadastre nomes e uma cor para cada um (visível nos cartões da aba <strong>Rotina</strong> na agenda). A opção{" "}

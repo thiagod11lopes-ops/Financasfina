@@ -4,9 +4,12 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
+import type { User } from "firebase/auth";
+import { doc, getFirestore, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import type {
   AppState,
   FixedAccount,
@@ -17,6 +20,9 @@ import type {
   VariableAccount,
   VariableSpend,
 } from "../types";
+import { FINANCES_EMPTY_STATE, reviveAppStateFromUnknown } from "../finance/reviveAppState";
+import { useAuth } from "../firebase/AuthProvider";
+import { getFirebaseApp } from "../firebase/config";
 import {
   computeMonthDashboardBalance,
   isInMonth,
@@ -27,120 +33,13 @@ import {
 
 const STORAGE_KEY = "financas-app-v1";
 
-const emptyState: AppState = {
-  movements: [],
-  fixedAccounts: [],
-  variableAccounts: [],
-  supermarket: [],
-  fuel: [],
-  futureIncomes: [],
-};
-
 function loadState(): AppState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...emptyState };
-    const parsed = JSON.parse(raw) as AppState;
-    const movements: Movement[] = Array.isArray(parsed.movements)
-      ? [...parsed.movements].map((m) => {
-          const responsible =
-            typeof m.responsible === "string" && m.responsible.trim() ? m.responsible : undefined;
-          return responsible ? { ...m, responsible } : { ...m };
-        })
-      : [];
-    const fixedAccounts = (Array.isArray(parsed.fixedAccounts) ? parsed.fixedAccounts : []).map(
-      (a: FixedAccount) => {
-        let linkedMovementId =
-          typeof a.linkedMovementId === "string" ? a.linkedMovementId : undefined;
-        const linkedExists =
-          linkedMovementId != null && movements.some((m) => m.id === linkedMovementId);
-        if ((a.inFlow ?? false) && !linkedExists) {
-          const existing = movements.find(
-            (m) =>
-              m.kind === "expense" &&
-              m.nature === "fixed" &&
-              m.amount === a.monthlyAmount &&
-              m.title === a.name,
-          );
-          if (existing) {
-            linkedMovementId = existing.id;
-          } else {
-            const movement: Movement = {
-              id: newId(),
-              kind: "expense",
-              amount: a.monthlyAmount,
-              title: a.name,
-              date: new Date().toISOString().slice(0, 10),
-              nature: "fixed",
-            };
-            movements.unshift(movement);
-            linkedMovementId = movement.id;
-          }
-        }
-        return {
-          ...a,
-          linkedMovementId,
-        };
-      },
-    );
-    return {
-      movements,
-      fixedAccounts,
-      variableAccounts: (
-        Array.isArray(parsed.variableAccounts) ? parsed.variableAccounts : []
-      ).map((v: VariableAccount) => ({
-        ...v,
-        spends: (Array.isArray(v.spends) ? v.spends : []).map((sp) => {
-          let linkedMovementId =
-            typeof sp.linkedMovementId === "string" ? sp.linkedMovementId : undefined;
-
-          const linkedExists =
-            linkedMovementId != null && movements.some((m) => m.id === linkedMovementId);
-
-          if (!linkedExists && sp.amount > 0) {
-            const existing = movements.find(
-              (m) =>
-                m.kind === "expense" &&
-                m.nature === "variable" &&
-                m.amount === sp.amount &&
-                m.title === sp.title &&
-                m.date === sp.date,
-            );
-            if (existing) {
-              linkedMovementId = existing.id;
-            } else {
-              const movement: Movement = {
-                id: newId(),
-                kind: "expense",
-                amount: sp.amount,
-                title: sp.title,
-                date: sp.date,
-                nature: "variable",
-              };
-              movements.unshift(movement);
-              linkedMovementId = movement.id;
-            }
-          }
-
-          return {
-            ...sp,
-            linkedMovementId,
-          };
-        }),
-      })),
-      supermarket: Array.isArray(parsed.supermarket) ? parsed.supermarket : [],
-      fuel: Array.isArray(parsed.fuel) ? parsed.fuel : [],
-      futureIncomes: Array.isArray(parsed.futureIncomes)
-        ? (parsed.futureIncomes as FutureIncomeEntry[]).map((e) => ({
-            ...e,
-            received: Boolean(e.received),
-            linkedMovementId:
-              typeof e.linkedMovementId === "string" ? e.linkedMovementId : undefined,
-          }))
-        : [],
-    };
+    if (!raw) return { ...FINANCES_EMPTY_STATE };
+    return reviveAppStateFromUnknown(JSON.parse(raw));
   } catch {
-    return { ...emptyState };
+    return { ...FINANCES_EMPTY_STATE };
   }
 }
 
@@ -223,10 +122,71 @@ function resolveVariableSpendMovementId(
 
 export function FinanceProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(() => loadState());
+  const { configured: fbConfigured, ready: authReady, user: fbUser } = useAuth();
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const prevFbUserRef = useRef<User | null | undefined>(undefined);
+
+  /** Sem sessão Firebase: persiste só no browser. Com sessão: fonte de verdade é o Firestore (não duplicar no localStorage). */
+  useEffect(() => {
+    if (fbUser) return;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }, [state, fbUser]);
+
+  /** Ao sair da conta Google, grava uma cópia local para voltar a usar offline. */
+  useEffect(() => {
+    const prev = prevFbUserRef.current;
+    prevFbUserRef.current = fbUser ?? null;
+    if (prev && !fbUser) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stateRef.current));
+    }
+  }, [fbUser]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, [state]);
+    if (!fbConfigured || !authReady || !fbUser) return;
+    const app = getFirebaseApp();
+    if (!app) return;
+    const db = getFirestore(app);
+    const ref = doc(db, "userFinances", fbUser.uid);
+    let firstSnapshot = true;
+    const unsub = onSnapshot(
+      ref,
+      (snap) => {
+        if (!snap.exists()) {
+          if (firstSnapshot) {
+            firstSnapshot = false;
+            const payload = reviveAppStateFromUnknown(stateRef.current);
+            void setDoc(ref, { version: 1, payload, updatedAt: serverTimestamp() }, { merge: true });
+          }
+          return;
+        }
+        firstSnapshot = false;
+        const data = snap.data() as { payload?: unknown };
+        if (data.payload == null) return;
+        const next = reviveAppStateFromUnknown(data.payload);
+        if (JSON.stringify(stateRef.current) === JSON.stringify(next)) return;
+        setState(next);
+      },
+      (err) => console.error("[Finanças Firestore]", err),
+    );
+    return () => unsub();
+  }, [fbConfigured, authReady, fbUser]);
+
+  useEffect(() => {
+    if (!fbConfigured || !authReady || !fbUser) return;
+    const app = getFirebaseApp();
+    if (!app) return;
+    const db = getFirestore(app);
+    const ref = doc(db, "userFinances", fbUser.uid);
+    const t = window.setTimeout(() => {
+      void setDoc(
+        ref,
+        { version: 1, payload: state, updatedAt: serverTimestamp() },
+        { merge: true },
+      );
+    }, 750);
+    return () => window.clearTimeout(t);
+  }, [state, fbConfigured, authReady, fbUser]);
 
   const addMovement = useCallback((m: Omit<Movement, "id">): string => {
     const id = newId();
@@ -417,7 +377,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const resetAllData = useCallback(() => {
-    setState({ ...emptyState });
+    setState({ ...FINANCES_EMPTY_STATE });
   }, []);
 
   const addFutureIncome = useCallback(

@@ -1,6 +1,6 @@
 # Finanças
 
-Aplicação web de gestão financeira familiar (React + TypeScript + Vite). Os dados ficam no **navegador** (localStorage); não há servidor próprio.
+Aplicação web de gestão financeira familiar (React + TypeScript + Vite). Por defeito os dados ficam no **navegador** (localStorage). Opcionalmente pode **sincronizar os dados financeiros** (fluxo, contas, mercado, etc.) com **Firebase** (Google + Firestore) após configurar o `.env`.
 
 ## Requisitos
 
@@ -73,6 +73,26 @@ O GitHub **nem sempre mostra** um campo com o link até existir **pelo menos um 
 Abre o site → **Ver código-fonte da página** (View Page Source). Se aparecer `src="/src/main.tsx"`, o GitHub está a servir o **`index.html` da raiz do repositório** (modo **Filial** / deploy a partir de ramo), **não** o site gerado pelo workflow a partir da pasta `dist/`.
 
 **Correção:** em **Settings → Pages → Fonte**, escolhe **GitHub Actions** (não “Filial”). Espera o workflow **Deploy GitHub Pages** ficar verde. Depois do código-fonte deve passar a referenciar algo como `/NOME_DO_REPO/assets/index-….js`.
+
+## Firebase (sincronização na nuvem)
+
+1. No [Firebase Console](https://console.firebase.google.com/), crie um projeto (ou use um existente).
+2. **Authentication** → método de início de sessão → ative **Google**.
+3. **Firestore Database** → crie a base (modo de teste basta para experimentar; para produção publique regras, por exemplo o ficheiro `firestore.rules` deste repositório: só o utilizador autenticado pode ler/escrever o documento `userFinances/{o_seu_uid}`).
+4. **Definições do projeto** → **As tuas apps** → ícone Web → copie os parâmetros do SDK.
+5. Na raiz do repositório, copie `.env.example` para `.env` e preencha as variáveis `VITE_FIREBASE_*`.
+6. Em **Authentication** → **Definições** → **Domínios autorizados**, adicione `localhost` e o domínio do GitHub Pages (ex.: `thiagod11lopes-ops.github.io`) para o login Google funcionar no site publicado.
+7. Na app: **Definições** → **Entrar com Google**. Com sessão ativa, os dados financeiros vão para o Firestore (`userFinances/{uid}`) **sem** gravar no `localStorage` a cada mudança; ao **sair**, guarda-se uma cópia local para usar offline.
+
+**Nota:** **Agenda**, **utilizadores/cores** e **abas do resumo** continuam só no `localStorage` deste aparelho.
+
+**GitHub Pages:** o workflow `pages.yml` já passa `VITE_FIREBASE_*` a partir dos **Secrets** do repositório. Para os preencher a partir do teu `.env` (com `gh` autenticado):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\upload-github-firebase-secrets.ps1
+```
+
+Se os secrets ainda não existirem, o build do Pages continua a funcionar, mas **sem** Firebase no site publicado.
 
 ## Licença
 
