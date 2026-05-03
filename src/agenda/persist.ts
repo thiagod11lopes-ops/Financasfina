@@ -15,11 +15,11 @@ function newId(): string {
   return crypto.randomUUID();
 }
 
-export function loadAgenda(): AgendaData {
+/** Normaliza agenda vinda do `localStorage` ou do Firestore. */
+export function reviveAgendaFromUnknown(parsed: unknown): AgendaData {
+  if (!parsed || typeof parsed !== "object") return defaultData();
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaultData();
-    const p = JSON.parse(raw) as Partial<AgendaData>;
+    const p = parsed as Partial<AgendaData>;
     return {
       version: 1,
       generalNotes: typeof p.generalNotes === "string" ? p.generalNotes : "",
@@ -66,6 +66,16 @@ export function loadAgenda(): AgendaData {
           })
         : [],
     };
+  } catch {
+    return defaultData();
+  }
+}
+
+export function loadAgenda(): AgendaData {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return defaultData();
+    return reviveAgendaFromUnknown(JSON.parse(raw));
   } catch {
     return defaultData();
   }

@@ -88,6 +88,11 @@ function sanitizeV2Users(input: unknown): UserRecord[] {
   return [{ name: USERS_ALL_OPTION }, ...body];
 }
 
+/** Comparar listas de utilizadores de forma estável (ex.: sincronização Firestore). */
+export function sanitizeForCloudCompare(users: UserRecord[]): string {
+  return JSON.stringify(sanitizeV2Users(users));
+}
+
 function isStoredV2(x: unknown): x is StoredV2 {
   return Boolean(x && typeof x === "object" && (x as StoredV2).version === 2 && Array.isArray((x as StoredV2).users));
 }
@@ -95,6 +100,11 @@ function isStoredV2(x: unknown): x is StoredV2 {
 function persistRecords(users: UserRecord[]): void {
   const payload: StoredV2 = { version: 2, users };
   localStorage.setItem(USERS_KEY, JSON.stringify(payload));
+}
+
+/** Grava a lista de utilizadores (ex.: após sincronizar a partir do Firestore). */
+export function saveUserRecords(users: UserRecord[]): void {
+  persistRecords(sanitizeV2Users(users));
 }
 
 export function loadUserRecords(): UserRecord[] {

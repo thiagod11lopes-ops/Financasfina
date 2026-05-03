@@ -11,17 +11,28 @@ export type TabsPersist = {
   active: string;
 };
 
-export function loadDashboardTabs(): TabsPersist {
+export function reviveDashboardTabsFromUnknown(raw: unknown): TabsPersist {
+  if (!raw || typeof raw !== "object") {
+    return { tabs: [LEGACY_DEFAULT_TAB], active: LEGACY_DEFAULT_TAB };
+  }
   try {
-    const raw = localStorage.getItem(DASH_TABS_KEY);
-    if (!raw) return { tabs: [LEGACY_DEFAULT_TAB], active: LEGACY_DEFAULT_TAB };
-    const p = JSON.parse(raw) as TabsPersist;
+    const p = raw as Partial<TabsPersist>;
     if (!Array.isArray(p.tabs) || p.tabs.length === 0) {
       return { tabs: [LEGACY_DEFAULT_TAB], active: LEGACY_DEFAULT_TAB };
     }
     const tabs = [...new Set(p.tabs.map(String))].sort();
-    const active = tabs.includes(p.active) ? p.active : tabs[0]!;
+    const active = typeof p.active === "string" && tabs.includes(p.active) ? p.active : tabs[0]!;
     return { tabs, active };
+  } catch {
+    return { tabs: [LEGACY_DEFAULT_TAB], active: LEGACY_DEFAULT_TAB };
+  }
+}
+
+export function loadDashboardTabs(): TabsPersist {
+  try {
+    const raw = localStorage.getItem(DASH_TABS_KEY);
+    if (!raw) return { tabs: [LEGACY_DEFAULT_TAB], active: LEGACY_DEFAULT_TAB };
+    return reviveDashboardTabsFromUnknown(JSON.parse(raw));
   } catch {
     return { tabs: [LEGACY_DEFAULT_TAB], active: LEGACY_DEFAULT_TAB };
   }

@@ -7,6 +7,7 @@ import {
 } from "../dashboardTabs";
 import { useFinance } from "../context/FinanceContext";
 import { useAuth } from "../firebase/AuthProvider";
+import { useUserDocCloud } from "../firebase/userDocCloud";
 import { countMonthEntries, formatMonthLabelPt, monthKey } from "../utils/format";
 import { MonthYearPickerModal } from "./MonthYearPickerModal";
 import {
@@ -27,6 +28,7 @@ const DEFAULT_NEW_COLOR = USER_COLOR_PRESETS[0]!;
 export function SettingsView() {
   const { state, deleteMonthData, resetAllData } = useFinance();
   const { configured: fbOk, ready: authReady, user: fbUser, signInWithGoogle, signOutUser, lastError } = useAuth();
+  const cloud = useUserDocCloud();
   const [deletePickerOpen, setDeletePickerOpen] = useState(false);
   const [wipeStep, setWipeStep] = useState<0 | 1>(0);
   const [userRecords, setUserRecords] = useState<UserRecord[]>(() => loadUserRecords());
@@ -59,17 +61,19 @@ export function SettingsView() {
       deleteMonthData(ym);
       removeMonthFromDashboardTabs(ym);
       notifyDashboardTabsSync();
+      cloud.scheduleDashboardTabsPush(loadDashboardTabs());
       setDeletePickerOpen(false);
     },
-    [state, deleteMonthData],
+    [state, deleteMonthData, cloud],
   );
 
   const handleWipeAll = useCallback(() => {
     resetAllData();
     resetDashboardTabsToCurrentMonth();
     notifyDashboardTabsSync();
+    cloud.scheduleDashboardTabsPush(loadDashboardTabs());
     setWipeStep(0);
-  }, [resetAllData]);
+  }, [resetAllData, cloud]);
 
   const handleAddUser = useCallback(() => {
     const v = newUser.trim();
@@ -79,19 +83,22 @@ export function SettingsView() {
     setNewUser("");
     setNewUserColor(DEFAULT_NEW_COLOR);
     notifyUsersSync();
-  }, [newUser, newUserColor]);
+    cloud.scheduleUsersPush(loadUserRecords());
+  }, [newUser, newUserColor, cloud]);
 
   const handleRemoveUser = useCallback((name: string) => {
     removeUserName(name);
     setUserRecords(loadUserRecords());
     notifyUsersSync();
-  }, []);
+    cloud.scheduleUsersPush(loadUserRecords());
+  }, [cloud]);
 
   const handleColorChange = useCallback((name: string, hex: string) => {
     setUserColor(name, hex);
     setUserRecords(loadUserRecords());
     notifyUsersSync();
-  }, []);
+    cloud.scheduleUsersPush(loadUserRecords());
+  }, [cloud]);
 
   return (
     <>
@@ -112,7 +119,8 @@ export function SettingsView() {
         ) : fbUser ? (
           <div className="settings-firebase-row">
             <p className="settings-muted">
-              Conta: <strong>{fbUser.email ?? fbUser.displayName ?? fbUser.uid}</strong>. Os dados financeiros ficam na nuvem (Firestore); ao sair, guarda-se uma cópia no dispositivo para usar sem login.
+              Conta: <strong>{fbUser.email ?? fbUser.displayName ?? fbUser.uid}</strong>. Finanças, resumo, agenda e
+              utilizadores sincronizam no Firestore; ao sair, guarda-se uma cópia local para usar sem login.
             </p>
             <button type="button" className="settings-btn settings-btn--outline" onClick={() => void signOutUser()}>
               Sair da conta Google
@@ -121,8 +129,8 @@ export function SettingsView() {
         ) : (
           <div className="settings-firebase-row">
             <p className="settings-muted">
-              Entre com a mesma conta Google em vários dispositivos para ver os mesmos dados financeiros. A agenda e
-              utilizadores locais continuam só neste aparelho por agora.
+              Entre com a mesma conta Google em vários dispositivos para sincronizar finanças, abas do resumo, agenda
+              familiar e lista de utilizadores responsáveis (última alteração na nuvem prevalece).
             </p>
             <button type="button" className="settings-btn settings-btn--primary" onClick={() => void signInWithGoogle()}>
               Entrar com Google

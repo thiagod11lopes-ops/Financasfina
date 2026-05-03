@@ -18,6 +18,7 @@ import {
   loadDashboardTabs,
   saveDashboardTabs,
 } from "../dashboardTabs";
+import { useUserDocCloud } from "../firebase/userDocCloud";
 import { USERS_ALL_OPTION, USERS_SYNC_EVENT, loadUsers } from "../users";
 
 function entryDateForMonth(ym: string): string {
@@ -27,6 +28,7 @@ function entryDateForMonth(ym: string): string {
 }
 
 export function Dashboard() {
+  const cloud = useUserDocCloud();
   const { state, bootstrapNewMonth, addMovement } = useFinance();
   const [tabs, setTabs] = useState<string[]>(() => loadDashboardTabs().tabs);
   const [activeKey, setActiveKey] = useState<string>(() => loadDashboardTabs().active);
@@ -78,8 +80,10 @@ export function Dashboard() {
   }, [balanceModalOpen]);
 
   useEffect(() => {
-    saveDashboardTabs({ tabs, active: activeKey });
-  }, [tabs, activeKey]);
+    const payload = { tabs, active: activeKey };
+    saveDashboardTabs(payload);
+    cloud.scheduleDashboardTabsPush(payload);
+  }, [tabs, activeKey, cloud]);
 
   useEffect(() => {
     const sync = () => {

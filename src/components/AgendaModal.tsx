@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { AgendaData, AgendaFamilyTask, AgendaReminder } from "../agenda/types";
 import { loadAgenda, newId, saveAgenda } from "../agenda/persist";
+import { AGENDA_CLOUD_SYNC_EVENT, useUserDocCloud } from "../firebase/userDocCloud";
 import { getFamilyTaskResponsibleLabel, getFamilyTaskResponsibles } from "../agenda/responsibles";
 import {
   IconCalendar,
@@ -148,6 +149,7 @@ type Props = {
 };
 
 export function AgendaModal({ open, onClose }: Props) {
+  const cloud = useUserDocCloud();
   const [tab, setTab] = useState<TabId>("calendar");
   const [data, setData] = useState<AgendaData>(() => loadAgenda());
   const [calYear, setCalYear] = useState(() => new Date().getFullYear());
@@ -186,8 +188,9 @@ export function AgendaModal({ open, onClose }: Props) {
 
   const closeAll = useCallback(() => {
     saveAgenda(dataRef.current);
+    if (cloud.cloudEnabled) cloud.pushAgendaImmediate(dataRef.current);
     onClose();
-  }, [onClose]);
+  }, [cloud, onClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -249,9 +252,18 @@ export function AgendaModal({ open, onClose }: Props) {
 
   useEffect(() => {
     if (!open) return;
-    const t = window.setTimeout(() => saveAgenda(data), 350);
+    const t = window.setTimeout(() => {
+      saveAgenda(data);
+      cloud.scheduleAgendaPush(data);
+    }, 350);
     return () => window.clearTimeout(t);
-  }, [data, open]);
+  }, [data, open, cloud]);
+
+  useEffect(() => {
+    const onCloud = () => setData(loadAgenda());
+    window.addEventListener(AGENDA_CLOUD_SYNC_EVENT, onCloud);
+    return () => window.removeEventListener(AGENDA_CLOUD_SYNC_EVENT, onCloud);
+  }, []);
 
   useEffect(() => {
     if (!open) return;

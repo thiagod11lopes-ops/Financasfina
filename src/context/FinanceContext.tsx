@@ -10,6 +10,7 @@ import {
 } from "react";
 import type { User } from "firebase/auth";
 import { doc, getFirestore, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
+import { firestoreTimestampMs } from "../firebase/firestoreTime";
 import type {
   AppState,
   FixedAccount,
@@ -126,6 +127,16 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const stateRef = useRef(state);
   stateRef.current = state;
   const prevFbUserRef = useRef<User | null | undefined>(undefined);
+  /** Evita sobrescrever edições locais com snapshots antigos (cache / fora de ordem). */
+  const lastPayloadRemoteMsRef = useRef(0);
+  const lastPayloadRemoteJsonRef = useRef("");
+  /** Após aplicar estado vindo do Firestore, não regravar o mesmo documento (efeito debounced). */
+  const skipNextFinancePersistRef = useRef(false);
+
+  useEffect(() => {
+    lastPayloadRemoteMsRef.current = 0;
+    lastPayloadRemoteJsonRef.current = "";
+  }, [fbUser?.uid]);
 
   /** Sem sessão Firebase: persiste só no browser. Com sessão: fonte de verdade é o Firestore (não duplicar no localStorage). */
   useEffect(() => {
@@ -156,15 +167,57 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           if (firstSnapshot) {
             firstSnapshot = false;
             const payload = reviveAppStateFromUnknown(stateRef.current);
-            void setDoc(ref, { version: 1, payload, updatedAt: serverTimestamp() }, { merge: true });
+            void setDoc(
+              ref,
+              {
+                version: 1,
+                payload,
+                updatedAt: serverTimestamp(),
+                payloadUpdatedAt: serverTimestamp(),
+              },
+              { merge: true },
+            );
           }
           return;
         }
         firstSnapshot = false;
-        const data = snap.data() as { payload?: unknown };
+        const data = snap.data() as Record<string, unknown>;
         if (data.payload == null) return;
+
+        const payloadTimeMs =
+          firestoreTimestampMs(data.payloadUpdatedAt) || firestoreTimestampMs(data.updatedAt);
         const next = reviveAppStateFromUnknown(data.payload);
-        if (JSON.stringify(stateRef.current) === JSON.stringify(next)) return;
+        const nextJson = JSON.stringify(next);
+        const lastMs = lastPayloadRemoteMsRef.current;
+        const lastJson = lastPayloadRemoteJsonRef.current;
+
+        if (payloadTimeMs < lastMs) return;
+
+        if (payloadTimeMs === lastMs && nextJson === lastJson) return;
+
+        if (
+          payloadTimeMs === lastMs &&
+          nextJson !== lastJson &&
+          snap.metadata.fromCache &&
+          !snap.metadata.hasPendingWrites
+        ) {
+          return;
+        }
+
+        if (payloadTimeMs > lastMs && nextJson === lastJson) {
+          lastPayloadRemoteMsRef.current = payloadTimeMs;
+          return;
+        }
+
+        if (JSON.stringify(stateRef.current) === nextJson) {
+          lastPayloadRemoteMsRef.current = payloadTimeMs;
+          lastPayloadRemoteJsonRef.current = nextJson;
+          return;
+        }
+
+        lastPayloadRemoteMsRef.current = payloadTimeMs;
+        lastPayloadRemoteJsonRef.current = nextJson;
+        skipNextFinancePersistRef.current = true;
         setState(next);
       },
       (err) => console.error("[Finanças Firestore]", err),
@@ -174,14 +227,24 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!fbConfigured || !authReady || !fbUser) return;
+    if (skipNextFinancePersistRef.current) {
+      skipNextFinancePersistRef.current = false;
+      return;
+    }
     const app = getFirebaseApp();
     if (!app) return;
     const db = getFirestore(app);
     const ref = doc(db, "userFinances", fbUser.uid);
     const t = window.setTimeout(() => {
+      const payload = reviveAppStateFromUnknown(stateRef.current);
       void setDoc(
         ref,
-        { version: 1, payload: state, updatedAt: serverTimestamp() },
+        {
+          version: 1,
+          payload,
+          updatedAt: serverTimestamp(),
+          payloadUpdatedAt: serverTimestamp(),
+        },
         { merge: true },
       );
     }, 750);
