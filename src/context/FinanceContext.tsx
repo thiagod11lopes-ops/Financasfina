@@ -139,6 +139,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const skipNextFinancePersistRef = useRef(false);
   /** Ids criados nesta sessão (com timestamp) para fundir com snapshots remotos e não perder dados entre dispositivos. */
   const localEntityBirthRef = useRef<Map<string, number>>(new Map());
+  const persistTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
   function touchLocalEntity(id: string) {
     localEntityBirthRef.current.set(id, Date.now());
@@ -147,17 +148,42 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     localEntityBirthRef.current.delete(id);
   }
 
+  const flushFinancePersistToCloud = useCallback(() => {
+    if (!fbConfigured || !authReady || !fbUser) return;
+    const app = getFirebaseApp();
+    if (!app) return;
+    const db = getFirestore(app);
+    const ref = doc(db, "userFinances", fbUser.uid);
+    pruneOrphanBirthIds(localEntityBirthRef.current, stateRef.current);
+    const payload = reviveAppStateFromUnknown(stateRef.current);
+    void setDoc(
+      ref,
+      {
+        version: 1,
+        payload,
+        updatedAt: serverTimestamp(),
+        payloadUpdatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    ).catch((err) => {
+      console.error("[Finanças Firestore persist]", err);
+    });
+  }, [fbConfigured, authReady, fbUser]);
+
   useEffect(() => {
     lastPayloadRemoteMsRef.current = 0;
     lastPayloadRemoteJsonRef.current = "";
     localEntityBirthRef.current.clear();
   }, [fbUser?.uid]);
 
-  /** Sem sessão Firebase: persiste só no browser. Com sessão: fonte de verdade é o Firestore (não duplicar no localStorage). */
+  /** Cópia local sempre atualizada (offline, recarga com login, ou antes do snapshot). */
   useEffect(() => {
-    if (fbUser) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, [state, fbUser]);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch {
+      /* quota */
+    }
+  }, [state]);
 
   /** Ao sair da conta Google, grava uma cópia local para voltar a usar offline. */
   useEffect(() => {
@@ -191,7 +217,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
                 payloadUpdatedAt: serverTimestamp(),
               },
               { merge: true },
-            );
+            ).catch((err) => console.error("[Finanças Firestore bootstrap]", err));
           }
           return;
         }
@@ -210,6 +236,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           localEntityBirthRef.current,
           Date.now(),
         );
+        const remoteCanonicalJson = JSON.stringify(remoteRevived);
         const nextJson = JSON.stringify(merged);
         const lastMs = lastPayloadRemoteMsRef.current;
         const lastJson = lastPayloadRemoteJsonRef.current;
@@ -240,7 +267,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
         lastPayloadRemoteMsRef.current = payloadTimeMs;
         lastPayloadRemoteJsonRef.current = nextJson;
-        skipNextFinancePersistRef.current = true;
+        /**
+         * Só evita regravar na nuvem quando o estado fundido é igual ao remoto puro.
+         * Se o merge acrescentou contas/lançamentos só locais, TEM de persistir — caso contrário
+         * nunca chegavam ao Firestore e sumiam ao recarregar ou noutros aparelhos.
+         */
+        skipNextFinancePersistRef.current = nextJson === remoteCanonicalJson;
         setState(merged);
       },
       (err) => console.error("[Finanças Firestore]", err),
@@ -254,26 +286,38 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       skipNextFinancePersistRef.current = false;
       return;
     }
-    const app = getFirebaseApp();
-    if (!app) return;
-    const db = getFirestore(app);
-    const ref = doc(db, "userFinances", fbUser.uid);
-    const t = window.setTimeout(() => {
-      pruneOrphanBirthIds(localEntityBirthRef.current, stateRef.current);
-      const payload = reviveAppStateFromUnknown(stateRef.current);
-      void setDoc(
-        ref,
-        {
-          version: 1,
-          payload,
-          updatedAt: serverTimestamp(),
-          payloadUpdatedAt: serverTimestamp(),
-        },
-        { merge: true },
-      );
+    if (persistTimerRef.current != null) {
+      window.clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = null;
+    }
+    persistTimerRef.current = window.setTimeout(() => {
+      persistTimerRef.current = null;
+      flushFinancePersistToCloud();
     }, 280);
-    return () => window.clearTimeout(t);
-  }, [state, fbConfigured, authReady, fbUser]);
+    return () => {
+      if (persistTimerRef.current != null) {
+        window.clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+    };
+  }, [state, fbConfigured, authReady, fbUser, flushFinancePersistToCloud]);
+
+  useEffect(() => {
+    if (!fbConfigured || !authReady || !fbUser) return;
+    const flush = () => {
+      if (persistTimerRef.current != null) {
+        window.clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+      flushFinancePersistToCloud();
+    };
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("beforeunload", flush);
+    };
+  }, [fbConfigured, authReady, fbUser, flushFinancePersistToCloud]);
 
   const addMovement = useCallback((m: Omit<Movement, "id">): string => {
     const id = newId();
