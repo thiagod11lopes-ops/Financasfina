@@ -24,19 +24,28 @@ npm run preview
 
 ## Publicar o código no GitHub
 
+### Opção A — script (recomendado no Windows)
+
+1. Instale o [GitHub CLI](https://cli.github.com/) se ainda não tiver: `winget install GitHub.cli`
+2. Na pasta do projeto:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\publicar-github.ps1
+```
+
+Na primeira execução abre-se o browser para **iniciar sessão** na GitHub; depois o script cria o repositório público (nome editável) e faz `push` do ramo `main`.
+
+### Opção B — manual
+
 1. Crie um repositório vazio no GitHub (sem README gerado pelo site, se já tiver ficheiros locais).
 2. Na pasta do projeto:
 
 ```bash
-git init
-git add .
-git commit -m "Initial commit"
-git branch -M main
 git remote add origin https://github.com/SEU_USUARIO/SEU_REPOSITORIO.git
 git push -u origin main
 ```
 
-Substitua o URL pelo do seu repositório.
+(O ramo local já deve ser `main`; o repositório local já tem histórico Git.)
 
 ## GitHub Actions
 
