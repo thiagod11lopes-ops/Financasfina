@@ -9,7 +9,8 @@ import {
   type ReactNode,
 } from "react";
 import type { User } from "firebase/auth";
-import { doc, getFirestore, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
+import type { DocumentSnapshot } from "firebase/firestore";
+import { doc, getDocFromServer, getFirestore, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import { firestoreTimestampMs } from "../firebase/firestoreTime";
 import type {
   AppState,
@@ -140,6 +141,23 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   /** Ids criados nesta sessão (com timestamp) para fundir com snapshots remotos e não perder dados entre dispositivos. */
   const localEntityBirthRef = useRef<Map<string, number>>(new Map());
   const persistTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  /** Com sessão ativa: em rede, a nuvem é a única fonte (sem fundir com cache local). */
+  const networkOnlineRef = useRef(
+    typeof navigator !== "undefined" ? navigator.onLine : true,
+  );
+
+  useEffect(() => {
+    const sync = () => {
+      networkOnlineRef.current = navigator.onLine;
+    };
+    window.addEventListener("online", sync);
+    window.addEventListener("offline", sync);
+    sync();
+    return () => {
+      window.removeEventListener("online", sync);
+      window.removeEventListener("offline", sync);
+    };
+  }, []);
 
   function touchLocalEntity(id: string) {
     localEntityBirthRef.current.set(id, Date.now());
@@ -170,10 +188,69 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     });
   }, [fbConfigured, authReady, fbUser]);
 
+  const tryApplyRemoteFinanceDoc = useCallback((data: Record<string, unknown>, snap: DocumentSnapshot) => {
+    if (data.payload == null) return;
+    const payloadTimeMs =
+      firestoreTimestampMs(data.payloadUpdatedAt) || firestoreTimestampMs(data.updatedAt);
+    const remoteRevived = reviveAppStateFromUnknown(data.payload);
+    const online = networkOnlineRef.current;
+    if (online) {
+      localEntityBirthRef.current.clear();
+    } else {
+      pruneBirthRefForIdsAckedInRemote(localEntityBirthRef.current, remoteRevived);
+      pruneOrphanBirthIds(localEntityBirthRef.current, stateRef.current);
+    }
+    const merged = online
+      ? remoteRevived
+      : mergeRemotePreservingPendingUploads(
+          stateRef.current,
+          remoteRevived,
+          localEntityBirthRef.current,
+          Date.now(),
+        );
+    const remoteCanonicalJson = JSON.stringify(remoteRevived);
+    const nextJson = JSON.stringify(merged);
+    const lastMs = lastPayloadRemoteMsRef.current;
+    const lastJson = lastPayloadRemoteJsonRef.current;
+
+    if (payloadTimeMs < lastMs) return;
+
+    if (payloadTimeMs === lastMs && nextJson === lastJson) return;
+
+    if (
+      payloadTimeMs === lastMs &&
+      nextJson !== lastJson &&
+      snap.metadata.fromCache &&
+      !snap.metadata.hasPendingWrites
+    ) {
+      return;
+    }
+
+    if (payloadTimeMs > lastMs && nextJson === lastJson) {
+      lastPayloadRemoteMsRef.current = payloadTimeMs;
+      return;
+    }
+
+    if (JSON.stringify(stateRef.current) === nextJson) {
+      lastPayloadRemoteMsRef.current = payloadTimeMs;
+      lastPayloadRemoteJsonRef.current = nextJson;
+      return;
+    }
+
+    lastPayloadRemoteMsRef.current = payloadTimeMs;
+    lastPayloadRemoteJsonRef.current = nextJson;
+    skipNextFinancePersistRef.current = nextJson === remoteCanonicalJson;
+    setState(merged);
+  }, []);
+
   useEffect(() => {
     lastPayloadRemoteMsRef.current = 0;
     lastPayloadRemoteJsonRef.current = "";
     localEntityBirthRef.current.clear();
+    const uid = fbUser?.uid;
+    if (uid && typeof navigator !== "undefined" && navigator.onLine) {
+      setState({ ...FINANCES_EMPTY_STATE });
+    }
   }, [fbUser?.uid]);
 
   /** Cópia local sempre atualizada (offline, recarga com login, ou antes do snapshot). */
@@ -207,7 +284,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         if (!snap.exists()) {
           if (firstSnapshot) {
             firstSnapshot = false;
-            const payload = reviveAppStateFromUnknown(stateRef.current);
+            const payload = networkOnlineRef.current
+              ? reviveAppStateFromUnknown({ ...FINANCES_EMPTY_STATE })
+              : reviveAppStateFromUnknown(stateRef.current);
             void setDoc(
               ref,
               {
@@ -222,63 +301,43 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           return;
         }
         firstSnapshot = false;
-        const data = snap.data() as Record<string, unknown>;
-        if (data.payload == null) return;
-
-        const payloadTimeMs =
-          firestoreTimestampMs(data.payloadUpdatedAt) || firestoreTimestampMs(data.updatedAt);
-        const remoteRevived = reviveAppStateFromUnknown(data.payload);
-        pruneBirthRefForIdsAckedInRemote(localEntityBirthRef.current, remoteRevived);
-        pruneOrphanBirthIds(localEntityBirthRef.current, stateRef.current);
-        const merged = mergeRemotePreservingPendingUploads(
-          stateRef.current,
-          remoteRevived,
-          localEntityBirthRef.current,
-          Date.now(),
-        );
-        const remoteCanonicalJson = JSON.stringify(remoteRevived);
-        const nextJson = JSON.stringify(merged);
-        const lastMs = lastPayloadRemoteMsRef.current;
-        const lastJson = lastPayloadRemoteJsonRef.current;
-
-        if (payloadTimeMs < lastMs) return;
-
-        if (payloadTimeMs === lastMs && nextJson === lastJson) return;
-
-        if (
-          payloadTimeMs === lastMs &&
-          nextJson !== lastJson &&
-          snap.metadata.fromCache &&
-          !snap.metadata.hasPendingWrites
-        ) {
-          return;
-        }
-
-        if (payloadTimeMs > lastMs && nextJson === lastJson) {
-          lastPayloadRemoteMsRef.current = payloadTimeMs;
-          return;
-        }
-
-        if (JSON.stringify(stateRef.current) === nextJson) {
-          lastPayloadRemoteMsRef.current = payloadTimeMs;
-          lastPayloadRemoteJsonRef.current = nextJson;
-          return;
-        }
-
-        lastPayloadRemoteMsRef.current = payloadTimeMs;
-        lastPayloadRemoteJsonRef.current = nextJson;
-        /**
-         * Só evita regravar na nuvem quando o estado fundido é igual ao remoto puro.
-         * Se o merge acrescentou contas/lançamentos só locais, TEM de persistir — caso contrário
-         * nunca chegavam ao Firestore e sumiam ao recarregar ou noutros aparelhos.
-         */
-        skipNextFinancePersistRef.current = nextJson === remoteCanonicalJson;
-        setState(merged);
+        tryApplyRemoteFinanceDoc(snap.data() as Record<string, unknown>, snap);
       },
       (err) => console.error("[Finanças Firestore]", err),
     );
     return () => unsub();
-  }, [fbConfigured, authReady, fbUser]);
+  }, [fbConfigured, authReady, fbUser, tryApplyRemoteFinanceDoc]);
+
+  /** Evita ficar com dados velhos do cache local noutro aparelho: puxa o documento do servidor ao entrar e ao voltar ao primeiro plano. */
+  useEffect(() => {
+    if (!fbConfigured || !authReady || !fbUser) return;
+    const app = getFirebaseApp();
+    if (!app) return;
+    const db = getFirestore(app);
+    const ref = doc(db, "userFinances", fbUser.uid);
+    let cancelled = false;
+    const pullFromServer = () => {
+      void getDocFromServer(ref)
+        .then((snap) => {
+          if (cancelled || !snap.exists()) return;
+          tryApplyRemoteFinanceDoc(snap.data() as Record<string, unknown>, snap);
+        })
+        .catch((e) => {
+          console.warn("[Finanças] pull servidor (getDocFromServer)", e);
+        });
+    };
+    pullFromServer();
+    const onVis = () => {
+      if (document.visibilityState === "visible") pullFromServer();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("online", pullFromServer);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("online", pullFromServer);
+    };
+  }, [fbConfigured, authReady, fbUser, tryApplyRemoteFinanceDoc]);
 
   useEffect(() => {
     if (!fbConfigured || !authReady || !fbUser) return;
