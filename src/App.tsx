@@ -6,12 +6,14 @@ import { AccountsView } from "./components/AccountsView";
 import { FutureIncomesView } from "./components/FutureIncomesView";
 import { SettingsView } from "./components/SettingsView";
 import { PageBranding } from "./components/PageBranding";
+import { CloudSyncBadge } from "./components/CloudSyncBadge";
 
 export default function App() {
   const [tab, setTab] = useState<TabId>("home");
 
   return (
     <>
+      <CloudSyncBadge />
       <main className="app-shell">
         <PageBranding />
         {tab === "home" && <Dashboard />}
