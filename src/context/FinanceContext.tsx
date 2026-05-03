@@ -21,6 +21,11 @@ import type {
   VariableAccount,
   VariableSpend,
 } from "../types";
+import {
+  mergeRemotePreservingPendingUploads,
+  pruneBirthRefForIdsAckedInRemote,
+  pruneOrphanBirthIds,
+} from "../finance/mergeRemoteSnapshot";
 import { FINANCES_EMPTY_STATE, reviveAppStateFromUnknown } from "../finance/reviveAppState";
 import { useAuth } from "../firebase/AuthProvider";
 import { getFirebaseApp } from "../firebase/config";
@@ -132,10 +137,20 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const lastPayloadRemoteJsonRef = useRef("");
   /** Após aplicar estado vindo do Firestore, não regravar o mesmo documento (efeito debounced). */
   const skipNextFinancePersistRef = useRef(false);
+  /** Ids criados nesta sessão (com timestamp) para fundir com snapshots remotos e não perder dados entre dispositivos. */
+  const localEntityBirthRef = useRef<Map<string, number>>(new Map());
+
+  function touchLocalEntity(id: string) {
+    localEntityBirthRef.current.set(id, Date.now());
+  }
+  function forgetLocalEntity(id: string) {
+    localEntityBirthRef.current.delete(id);
+  }
 
   useEffect(() => {
     lastPayloadRemoteMsRef.current = 0;
     lastPayloadRemoteJsonRef.current = "";
+    localEntityBirthRef.current.clear();
   }, [fbUser?.uid]);
 
   /** Sem sessão Firebase: persiste só no browser. Com sessão: fonte de verdade é o Firestore (não duplicar no localStorage). */
@@ -186,8 +201,16 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
         const payloadTimeMs =
           firestoreTimestampMs(data.payloadUpdatedAt) || firestoreTimestampMs(data.updatedAt);
-        const next = reviveAppStateFromUnknown(data.payload);
-        const nextJson = JSON.stringify(next);
+        const remoteRevived = reviveAppStateFromUnknown(data.payload);
+        pruneBirthRefForIdsAckedInRemote(localEntityBirthRef.current, remoteRevived);
+        pruneOrphanBirthIds(localEntityBirthRef.current, stateRef.current);
+        const merged = mergeRemotePreservingPendingUploads(
+          stateRef.current,
+          remoteRevived,
+          localEntityBirthRef.current,
+          Date.now(),
+        );
+        const nextJson = JSON.stringify(merged);
         const lastMs = lastPayloadRemoteMsRef.current;
         const lastJson = lastPayloadRemoteJsonRef.current;
 
@@ -218,7 +241,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         lastPayloadRemoteMsRef.current = payloadTimeMs;
         lastPayloadRemoteJsonRef.current = nextJson;
         skipNextFinancePersistRef.current = true;
-        setState(next);
+        setState(merged);
       },
       (err) => console.error("[Finanças Firestore]", err),
     );
@@ -236,6 +259,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const db = getFirestore(app);
     const ref = doc(db, "userFinances", fbUser.uid);
     const t = window.setTimeout(() => {
+      pruneOrphanBirthIds(localEntityBirthRef.current, stateRef.current);
       const payload = reviveAppStateFromUnknown(stateRef.current);
       void setDoc(
         ref,
@@ -247,12 +271,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         },
         { merge: true },
       );
-    }, 750);
+    }, 280);
     return () => window.clearTimeout(t);
   }, [state, fbConfigured, authReady, fbUser]);
 
   const addMovement = useCallback((m: Omit<Movement, "id">): string => {
     const id = newId();
+    touchLocalEntity(id);
     setState((s) => ({
       ...s,
       movements: [{ ...m, id }, ...s.movements],
@@ -261,6 +286,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const removeMovement = useCallback((id: string) => {
+    forgetLocalEntity(id);
     setState((s) => ({
       ...s,
       movements: s.movements.filter((x) => x.id !== id),
@@ -268,9 +294,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addFixedAccount = useCallback((a: Omit<FixedAccount, "id">) => {
+    const id = newId();
+    touchLocalEntity(id);
     setState((s) => ({
       ...s,
-      fixedAccounts: [...s.fixedAccounts, { ...a, id: newId() }],
+      fixedAccounts: [...s.fixedAccounts, { ...a, id }],
     }));
   }, []);
 
@@ -287,6 +315,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   );
 
   const removeFixedAccount = useCallback((id: string) => {
+    forgetLocalEntity(id);
     setState((s) => ({
       ...s,
       fixedAccounts: s.fixedAccounts.filter((x) => x.id !== id),
@@ -295,11 +324,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   const addVariableAccount = useCallback((a: Omit<VariableAccount, "id">) => {
     const { spends: _s, ...rest } = a;
+    const id = newId();
+    touchLocalEntity(id);
     setState((s) => ({
       ...s,
       variableAccounts: [
         ...s.variableAccounts,
-        { ...rest, id: newId(), spends: [] },
+        { ...rest, id, spends: [] },
       ],
     }));
   }, []);
@@ -317,17 +348,24 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   );
 
   const removeVariableAccount = useCallback((id: string) => {
-    setState((s) => ({
-      ...s,
-      variableAccounts: s.variableAccounts.filter((x) => x.id !== id),
-    }));
+    setState((s) => {
+      const acc = s.variableAccounts.find((x) => x.id === id);
+      for (const sp of acc?.spends ?? []) forgetLocalEntity(sp.id);
+      forgetLocalEntity(id);
+      return {
+        ...s,
+        variableAccounts: s.variableAccounts.filter((x) => x.id !== id),
+      };
+    });
   }, []);
 
   const addVariableSpend = useCallback(
     (accountId: string, entry: Omit<VariableSpend, "id" | "linkedMovementId">) => {
+      const movementId = newId();
+      const spendId = newId();
+      touchLocalEntity(movementId);
+      touchLocalEntity(spendId);
       setState((s) => {
-        const movementId = newId();
-        const spendId = newId();
         const movement: Movement = {
           id: movementId,
           kind: "expense",
@@ -362,6 +400,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         const account = s.variableAccounts.find((x) => x.id === accountId);
         const spend = account?.spends?.find((sp) => sp.id === spendId);
         const movementId = spend ? resolveVariableSpendMovementId(s.movements, spend) : null;
+        forgetLocalEntity(spendId);
+        if (movementId) forgetLocalEntity(movementId);
         return {
           ...s,
           movements: movementId
@@ -382,13 +422,16 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   );
 
   const addSupermarket = useCallback((e: Omit<SupermarketEntry, "id">) => {
+    const id = newId();
+    touchLocalEntity(id);
     setState((s) => ({
       ...s,
-      supermarket: [{ ...e, id: newId() }, ...s.supermarket],
+      supermarket: [{ ...e, id }, ...s.supermarket],
     }));
   }, []);
 
   const removeSupermarket = useCallback((id: string) => {
+    forgetLocalEntity(id);
     setState((s) => ({
       ...s,
       supermarket: s.supermarket.filter((x) => x.id !== id),
@@ -399,11 +442,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     (e: Omit<FuelEntry, "id" | "total"> & { total?: number }) => {
       const total =
         e.total ?? Math.round(e.liters * e.pricePerLiter * 100) / 100;
+      const id = newId();
+      touchLocalEntity(id);
       setState((s) => ({
         ...s,
         fuel: [
           {
-            id: newId(),
+            id,
             liters: e.liters,
             pricePerLiter: e.pricePerLiter,
             total,
@@ -419,6 +464,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   );
 
   const removeFuel = useCallback((id: string) => {
+    forgetLocalEntity(id);
     setState((s) => ({
       ...s,
       fuel: s.fuel.filter((x) => x.id !== id),
@@ -440,14 +486,17 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const resetAllData = useCallback(() => {
+    localEntityBirthRef.current.clear();
     setState({ ...FINANCES_EMPTY_STATE });
   }, []);
 
   const addFutureIncome = useCallback(
     (e: Omit<FutureIncomeEntry, "id" | "received" | "receivedAt" | "linkedMovementId">) => {
+      const id = newId();
+      touchLocalEntity(id);
       setState((s) => ({
         ...s,
-        futureIncomes: [{ ...e, id: newId(), received: false }, ...s.futureIncomes],
+        futureIncomes: [{ ...e, id, received: false }, ...s.futureIncomes],
       }));
     },
     [],
@@ -462,6 +511,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       const movementDate =
         rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : today;
       const movementId = newId();
+      touchLocalEntity(movementId);
       const movement: Movement = {
         id: movementId,
         kind: "income",
@@ -486,6 +536,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       const entry = s.futureIncomes.find((x) => x.id === id);
       if (!entry || !entry.received) return s;
       const mid = resolveFutureIncomeMovementId(s.movements, entry);
+      if (mid) forgetLocalEntity(mid);
       const movements = mid ? s.movements.filter((m) => m.id !== mid) : s.movements;
       return {
         ...s,
@@ -508,7 +559,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setState((s) => {
       const entry = s.futureIncomes.find((x) => x.id === id);
       if (!entry) return s;
+      forgetLocalEntity(id);
       const mid = entry.received ? resolveFutureIncomeMovementId(s.movements, entry) : null;
+      if (mid) forgetLocalEntity(mid);
       const movements =
         entry.received && mid ? s.movements.filter((m) => m.id !== mid) : s.movements;
       return {
@@ -535,16 +588,20 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       const prevBalance = computeMonthDashboardBalance(s, prev);
       const inherit: Movement[] = [];
       if (prevBalance > 0) {
+        const hid = newId();
+        touchLocalEntity(hid);
         inherit.push({
-          id: newId(),
+          id: hid,
           kind: "income",
           amount: prevBalance,
           title: "Saldo herdado (mês anterior)",
           date: startDate,
         });
       } else if (prevBalance < 0) {
+        const hid = newId();
+        touchLocalEntity(hid);
         inherit.push({
-          id: newId(),
+          id: hid,
           kind: "expense",
           amount: Math.abs(prevBalance),
           title: "Saldo herdado (déficit mês anterior)",
@@ -563,8 +620,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         const spends = [...(acc.spends ?? [])];
         const hasYmSpend = spends.some((sp) => isInMonth(sp.date, ym));
         if (hasYmSpend) return { ...acc, spends };
+        const zid = newId();
+        touchLocalEntity(zid);
         spends.push({
-          id: newId(),
+          id: zid,
           amount: 0,
           title: variableSpendTitleForDate(startDate),
           date: startDate,
