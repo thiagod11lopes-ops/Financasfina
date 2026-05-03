@@ -39,6 +39,7 @@ foreach ($line in $lines) {
   if ($i -lt 1) { continue }
   $k = $t.Substring(0, $i).Trim()
   $v = $t.Substring($i + 1).Trim().Trim('"')
+  $v = ($v -replace "[\t\r\n]+", "").Trim()
   if ($k.StartsWith("VITE_FIREBASE_")) {
     $map[$k] = $v
   }
