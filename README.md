@@ -50,7 +50,7 @@ git push -u origin main
 ## GitHub Actions
 
 - **CI** (`.github/workflows/ci.yml`): em cada push ou pull request para `main`/`master`, instala dependências e corre `npm run build`.
-- **Deploy GitHub Pages** (`.github/workflows/pages.yml`): opcional. Em **Settings → Pages**, escolha **Source: GitHub Actions**. Após o primeiro deploy, o site fica em `https://SEU_USUARIO.github.io/NOME_DO_REPOSITORIO/`. O workflow define `VITE_BASE` com o nome do repositório para os recursos carregarem bem nesse caminho.
+- **Deploy GitHub Pages** (`.github/workflows/pages.yml`): opcional. Em **Settings → Pages → Build and deployment**, a **Source** tem de ser **GitHub Actions** (não “Deploy from a branch”). O workflow tem dois jobs (`build` + `deploy`); sem a source correta, o deploy falha com X vermelho. Depois do primeiro sucesso, o site fica em `https://SEU_USUARIO.github.io/NOME_DO_REPOSITORIO/`. O build usa `VITE_BASE` igual ao nome do repositório.
 
 Se o nome do repositório no URL for diferente do que o GitHub expõe em `github.event.repository.name`, ajuste a variável `VITE_BASE` no ficheiro `pages.yml` (deve ser o segmento após `github.io`, com barras: `/meu-repo/`).
 

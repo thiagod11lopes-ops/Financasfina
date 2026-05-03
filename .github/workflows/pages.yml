@@ -1,12 +1,12 @@
-# Publica o site em GitHub Pages (Settings → Pages → Source: GitHub Actions).
-# O caminho base segue o nome do repositório. Se o site não carregar os ficheiros,
-# confirme que VITE_BASE no passo de build coincide com o URL (ex.: /financas/).
+# GitHub Pages: em Settings → Pages → "Build and deployment" → Source: GitHub Actions.
+# Sem isso, o job de deploy falha.
 
 name: Deploy GitHub Pages
 
 on:
   push:
     branches: [main, master]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -15,13 +15,10 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,11 +35,19 @@ jobs:
         env:
           VITE_BASE: /${{ github.event.repository.name }}/
 
-      - uses: actions/configure-pages@v5
-
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v4
