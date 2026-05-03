@@ -68,6 +68,12 @@ O GitHub **nem sempre mostra** um campo com o link até existir **pelo menos um 
 
 4. Repositório **público**: Pages neste modo costuma ser gratuito. Se o repo for **privado**, em contas gratuitas o GitHub pode não publicar o site como esperado; nesse caso torna o repositório público ou consulta os planos do GitHub.
 
+### Página em branco no GitHub Pages
+
+Abre o site → **Ver código-fonte da página** (View Page Source). Se aparecer `src="/src/main.tsx"`, o GitHub está a servir o **`index.html` da raiz do repositório** (modo **Filial** / deploy a partir de ramo), **não** o site gerado pelo workflow a partir da pasta `dist/`.
+
+**Correção:** em **Settings → Pages → Fonte**, escolhe **GitHub Actions** (não “Filial”). Espera o workflow **Deploy GitHub Pages** ficar verde. Depois do código-fonte deve passar a referenciar algo como `/NOME_DO_REPO/assets/index-….js`.
+
 ## Licença
 
 Uso pessoal / familiar; defina uma licença se quiser reutilização pública.
