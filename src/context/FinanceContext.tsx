@@ -138,6 +138,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const lastPayloadRemoteJsonRef = useRef("");
   /** Após aplicar estado vindo do Firestore, não regravar o mesmo documento (efeito debounced). */
   const skipNextFinancePersistRef = useRef(false);
+  /**
+   * Evita gravar `payload` na nuvem antes de sincronizar com o Firestore (ex.: estado vazio ao iniciar
+   * sessão online sobrescrevia contas / entradas futuras noutros aparelhos).
+   */
+  const allowFinanceCloudPersistRef = useRef(false);
   /** Ids criados nesta sessão (com timestamp) para fundir com snapshots remotos e não perder dados entre dispositivos. */
   const localEntityBirthRef = useRef<Map<string, number>>(new Map());
   const persistTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
@@ -167,6 +172,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }
 
   const flushFinancePersistToCloud = useCallback(() => {
+    if (!allowFinanceCloudPersistRef.current) return;
     if (!fbConfigured || !authReady || !fbUser) return;
     const app = getFirebaseApp();
     if (!app) return;
@@ -190,6 +196,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   const tryApplyRemoteFinanceDoc = useCallback((data: Record<string, unknown>, snap: DocumentSnapshot) => {
     if (data.payload == null) return;
+    const allowPersistAfterRemote = () => {
+      allowFinanceCloudPersistRef.current = true;
+    };
     const payloadTimeMs =
       firestoreTimestampMs(data.payloadUpdatedAt) || firestoreTimestampMs(data.updatedAt);
     const remoteRevived = reviveAppStateFromUnknown(data.payload);
@@ -228,18 +237,21 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
     if (payloadTimeMs > lastMs && nextJson === lastJson) {
       lastPayloadRemoteMsRef.current = payloadTimeMs;
+      allowPersistAfterRemote();
       return;
     }
 
     if (JSON.stringify(stateRef.current) === nextJson) {
       lastPayloadRemoteMsRef.current = payloadTimeMs;
       lastPayloadRemoteJsonRef.current = nextJson;
+      allowPersistAfterRemote();
       return;
     }
 
     lastPayloadRemoteMsRef.current = payloadTimeMs;
     lastPayloadRemoteJsonRef.current = nextJson;
     skipNextFinancePersistRef.current = nextJson === remoteCanonicalJson;
+    allowPersistAfterRemote();
     setState(merged);
   }, []);
 
@@ -247,6 +259,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     lastPayloadRemoteMsRef.current = 0;
     lastPayloadRemoteJsonRef.current = "";
     localEntityBirthRef.current.clear();
+    allowFinanceCloudPersistRef.current = false;
     const uid = fbUser?.uid;
     if (uid && typeof navigator !== "undefined" && navigator.onLine) {
       setState({ ...FINANCES_EMPTY_STATE });
