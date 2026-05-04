@@ -8,11 +8,12 @@ import {
   parseDateBrToIso,
   parseMoney,
 } from "../utils/format";
-import { IconTrash } from "./Icons";
+import { IconChevronDown, IconTrash } from "./Icons";
 
 export function FutureIncomesView() {
   const { state, addFutureIncome, markFutureIncomeReceived, markFutureIncomePending, removeFutureIncome } =
     useFinance();
+  const [newFormOpen, setNewFormOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [title, setTitle] = useState("");
   const [expectedDateBr, setExpectedDateBr] = useState(() =>
@@ -46,67 +47,92 @@ export function FutureIncomesView() {
       setAmount("");
       setTitle("");
       setExpectedDateBr(formatDateBr(new Date().toISOString().slice(0, 10)));
+      setNewFormOpen(false);
     },
     [amount, title, expectedDateBr, addFutureIncome],
   );
 
   return (
     <>
-      <form className="card card-glow" onSubmit={submit}>
-        <span className="badge">Nova entrada futura</span>
-        <h3 style={{ margin: "12px 0 8px", fontSize: "0.95rem" }}>Valor, data e descrição</h3>
-        <div className="form-row">
-          <label htmlFor="fi-amount">Valor a receber (R$)</label>
-          <input
-            id="fi-amount"
-            className="input"
-            inputMode="decimal"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="0,00"
-          />
+      <div className="card card--collapsible card-glow">
+        <div className="card-expand-head">
+          <h3 id="fi-new-heading" className="card-expand-title">
+            Nova entrada futura
+          </h3>
+          <button
+            type="button"
+            className="card-expand-trigger"
+            aria-expanded={newFormOpen}
+            aria-controls="fi-new-form"
+            onClick={() => setNewFormOpen((o) => !o)}
+            aria-label={newFormOpen ? "Ocultar formulário" : "Expandir formulário"}
+          >
+            <IconChevronDown className={newFormOpen ? "is-open" : undefined} aria-hidden />
+          </button>
         </div>
-        <div className="form-row">
-          <label htmlFor="fi-date">Data prevista de entrada</label>
-          <input
-            id="fi-date"
-            className="input"
-            inputMode="numeric"
-            autoComplete="off"
-            placeholder="DD/MM/AAAA"
-            value={expectedDateBr}
-            onChange={(e) => {
-              setDateError("");
-              setExpectedDateBr(digitsToDateBrDisplay(e.target.value));
-            }}
-            onBlur={() => {
-              const iso = parseDateBrToIso(expectedDateBr);
-              if (iso) setExpectedDateBr(formatDateBr(iso));
-            }}
-            aria-invalid={dateError ? true : undefined}
-            aria-describedby={dateError ? "fi-date-error" : undefined}
-          />
-          {dateError ? (
-            <p id="fi-date-error" className="form-field-error" role="alert">
-              {dateError}
-            </p>
-          ) : null}
+        <div
+          id="fi-new-form"
+          className="card-expand-body"
+          role="region"
+          aria-labelledby="fi-new-heading"
+          hidden={!newFormOpen}
+        >
+          <form onSubmit={submit}>
+            <span className="badge">Valor, data e descrição</span>
+            <div className="form-row" style={{ marginTop: 12 }}>
+              <label htmlFor="fi-amount">Valor a receber (R$)</label>
+              <input
+                id="fi-amount"
+                className="input"
+                inputMode="decimal"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0,00"
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor="fi-date">Data prevista de entrada</label>
+              <input
+                id="fi-date"
+                className="input"
+                inputMode="numeric"
+                autoComplete="off"
+                placeholder="DD/MM/AAAA"
+                value={expectedDateBr}
+                onChange={(e) => {
+                  setDateError("");
+                  setExpectedDateBr(digitsToDateBrDisplay(e.target.value));
+                }}
+                onBlur={() => {
+                  const iso = parseDateBrToIso(expectedDateBr);
+                  if (iso) setExpectedDateBr(formatDateBr(iso));
+                }}
+                aria-invalid={dateError ? true : undefined}
+                aria-describedby={dateError ? "fi-date-error" : undefined}
+              />
+              {dateError ? (
+                <p id="fi-date-error" className="form-field-error" role="alert">
+                  {dateError}
+                </p>
+              ) : null}
+            </div>
+            <div className="form-row">
+              <label htmlFor="fi-title">Descrição</label>
+              <input
+                id="fi-title"
+                className="input"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Ex.: 13º salário, reembolso cliente…"
+                enterKeyHint="done"
+              />
+            </div>
+            <button type="submit" className="btn btn-primary">
+              Adicionar à lista
+            </button>
+          </form>
         </div>
-        <div className="form-row">
-          <label htmlFor="fi-title">Descrição</label>
-          <input
-            id="fi-title"
-            className="input"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Ex.: 13º salário, reembolso cliente…"
-            enterKeyHint="done"
-          />
-        </div>
-        <button type="submit" className="btn btn-primary">
-          Adicionar à lista
-        </button>
-      </form>
+      </div>
 
       <div className="card" style={{ marginTop: 12 }}>
         <h3 style={{ margin: "0 0 12px", fontSize: "0.95rem" }}>Suas entradas futuras</h3>
