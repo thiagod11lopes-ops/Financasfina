@@ -196,13 +196,17 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   const tryApplyRemoteFinanceDoc = useCallback((data: Record<string, unknown>, snap: DocumentSnapshot) => {
     if (data.payload == null) return;
+    const online = networkOnlineRef.current;
+    /** Evita aplicar/gravar payload antigo da IndexedDB antes do servidor (outro aparelho “não vê” dados e o refresh pode sobrescrever a nuvem). */
+    if (online && snap.metadata.fromCache && !snap.metadata.hasPendingWrites) {
+      return;
+    }
     const allowPersistAfterRemote = () => {
       allowFinanceCloudPersistRef.current = true;
     };
     const payloadTimeMs =
       firestoreTimestampMs(data.payloadUpdatedAt) || firestoreTimestampMs(data.updatedAt);
     const remoteRevived = reviveAppStateFromUnknown(data.payload);
-    const online = networkOnlineRef.current;
     if (online) {
       localEntityBirthRef.current.clear();
     } else {
@@ -284,6 +288,37 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
   }, [fbUser]);
 
+  /** Puxa do servidor antes de confiar no listener (evita snapshot só da IndexedDB). */
+  useEffect(() => {
+    if (!fbConfigured || !authReady || !fbUser) return;
+    const app = getFirebaseApp();
+    if (!app) return;
+    const db = getFirestore(app);
+    const ref = doc(db, "userFinances", fbUser.uid);
+    let cancelled = false;
+    const pullFromServer = () => {
+      void getDocFromServer(ref)
+        .then((snap) => {
+          if (cancelled || !snap.exists()) return;
+          tryApplyRemoteFinanceDoc(snap.data() as Record<string, unknown>, snap);
+        })
+        .catch((e) => {
+          console.warn("[Finanças] pull servidor (getDocFromServer)", e);
+        });
+    };
+    pullFromServer();
+    const onVis = () => {
+      if (document.visibilityState === "visible") pullFromServer();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("online", pullFromServer);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("online", pullFromServer);
+    };
+  }, [fbConfigured, authReady, fbUser, tryApplyRemoteFinanceDoc]);
+
   useEffect(() => {
     if (!fbConfigured || !authReady || !fbUser) return;
     const app = getFirebaseApp();
@@ -319,37 +354,6 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       (err) => console.error("[Finanças Firestore]", err),
     );
     return () => unsub();
-  }, [fbConfigured, authReady, fbUser, tryApplyRemoteFinanceDoc]);
-
-  /** Evita ficar com dados velhos do cache local noutro aparelho: puxa o documento do servidor ao entrar e ao voltar ao primeiro plano. */
-  useEffect(() => {
-    if (!fbConfigured || !authReady || !fbUser) return;
-    const app = getFirebaseApp();
-    if (!app) return;
-    const db = getFirestore(app);
-    const ref = doc(db, "userFinances", fbUser.uid);
-    let cancelled = false;
-    const pullFromServer = () => {
-      void getDocFromServer(ref)
-        .then((snap) => {
-          if (cancelled || !snap.exists()) return;
-          tryApplyRemoteFinanceDoc(snap.data() as Record<string, unknown>, snap);
-        })
-        .catch((e) => {
-          console.warn("[Finanças] pull servidor (getDocFromServer)", e);
-        });
-    };
-    pullFromServer();
-    const onVis = () => {
-      if (document.visibilityState === "visible") pullFromServer();
-    };
-    document.addEventListener("visibilitychange", onVis);
-    window.addEventListener("online", pullFromServer);
-    return () => {
-      cancelled = true;
-      document.removeEventListener("visibilitychange", onVis);
-      window.removeEventListener("online", pullFromServer);
-    };
   }, [fbConfigured, authReady, fbUser, tryApplyRemoteFinanceDoc]);
 
   useEffect(() => {
