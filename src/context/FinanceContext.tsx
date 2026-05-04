@@ -158,6 +158,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   /** Ids criados nesta sessão (com timestamp) para fundir com snapshots remotos e não perder dados entre dispositivos. */
   const localEntityBirthRef = useRef<Map<string, number>>(new Map());
   const persistTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const persistInFlightRef = useRef(false);
   /** Com sessão ativa: em rede, a nuvem é a única fonte (sem fundir com cache local). */
   const networkOnlineRef = useRef(
     typeof navigator !== "undefined" ? navigator.onLine : true,
@@ -190,27 +191,73 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }
 
   const flushFinancePersistToCloud = useCallback(() => {
-    if (!allowFinanceCloudPersistRef.current) return;
-    if (!fbConfigured || !authReady || !fbUser) return;
-    const app = getFirebaseApp();
-    if (!app) return;
-    const db = getFirestore(app);
-    const ref = doc(db, "userFinances", fbUser.uid);
-    pruneOrphanBirthIds(localEntityBirthRef.current, stateRef.current);
-    const payload = reviveAppStateFromUnknown(stateRef.current);
-    void setDoc(
-      ref,
-      {
-        version: 1,
-        payload,
-        updatedAt: serverTimestamp(),
-        payloadUpdatedAt: serverTimestamp(),
-        payloadWriteSeq: increment(1),
-      },
-      { merge: true },
-    ).catch((err) => {
-      console.error("[Finanças Firestore persist]", err);
-    });
+    void (async () => {
+      if (!allowFinanceCloudPersistRef.current) return;
+      if (!fbConfigured || !authReady || !fbUser) return;
+      if (persistInFlightRef.current) return;
+      persistInFlightRef.current = true;
+      const app = getFirebaseApp();
+      if (!app) {
+        persistInFlightRef.current = false;
+        return;
+      }
+      const db = getFirestore(app);
+      const ref = doc(db, "userFinances", fbUser.uid);
+      const online =
+        typeof navigator !== "undefined" ? navigator.onLine : true;
+      let serverSeqForBump = 0;
+
+      try {
+        if (online) {
+          let serverSnap: Awaited<ReturnType<typeof getDocFromServer>>;
+          try {
+            serverSnap = await getDocFromServer(ref);
+          } catch (e) {
+            console.warn("[Finanças] persist: leitura no servidor falhou", e);
+            return;
+          }
+          if (serverSnap.exists()) {
+            const d = serverSnap.data() as Record<string, unknown>;
+            const srvSeq =
+              typeof d.payloadWriteSeq === "number" &&
+              Number.isFinite(d.payloadWriteSeq) &&
+              d.payloadWriteSeq >= 0
+                ? d.payloadWriteSeq
+                : 0;
+            serverSeqForBump = srvSeq;
+            /** Outro aparelho (ou outra aba) gravou primeiro: o Firebase é a fonte da verdade. */
+            if (srvSeq > lastPayloadWriteSeqRef.current && d.payload != null) {
+              tryApplyRemoteFinanceDoc(d, serverSnap as DocumentSnapshot);
+              return;
+            }
+          }
+        }
+
+        pruneOrphanBirthIds(localEntityBirthRef.current, stateRef.current);
+        const payload = reviveAppStateFromUnknown(stateRef.current);
+        await setDoc(
+          ref,
+          {
+            version: 1,
+            payload,
+            updatedAt: serverTimestamp(),
+            payloadUpdatedAt: serverTimestamp(),
+            payloadWriteSeq: increment(1),
+          },
+          { merge: true },
+        );
+        if (online) {
+          lastPayloadWriteSeqRef.current = Math.max(
+            lastPayloadWriteSeqRef.current,
+            serverSeqForBump + 1,
+          );
+        }
+      } catch (err) {
+        console.error("[Finanças Firestore persist]", err);
+      } finally {
+        persistInFlightRef.current = false;
+      }
+    })();
   }, [fbConfigured, authReady, fbUser]);
 
   const tryApplyRemoteFinanceDoc = useCallback((data: Record<string, unknown>, snap: DocumentSnapshot) => {
