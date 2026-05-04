@@ -126,25 +126,37 @@ export function sumVariableBudgetPendingForMonth(state: AppState, ym: string): n
 }
 
 /**
- * Soma das saídas no fluxo do mês `ym` que são gastos variáveis (`nature === "variable"`).
- * Usado na projeção para não contar esse valor duas vezes com os tetos.
+ * Soma das saídas no fluxo do mês `ym` que correspondem a gastos de **contas variáveis**:
+ * `nature === "variable"` ou movimento referenciado por `VariableSpend.linkedMovementId` naquele mês.
+ * Na projeção de saldo esses valores são **devolvidos** ao saldo base (só entram os tetos), para não
+ * somar com os gastos reais já debitados no painel (evita duplicar).
  */
 export function sumVariableExpenseMovementsForMonth(state: AppState, ym: string): number {
   if (!/^\d{4}-\d{2}$/.test(ym)) return 0;
+  const movementIdsFromVariableSpends = new Set<string>();
+  for (const acc of state.variableAccounts) {
+    for (const sp of acc.spends ?? []) {
+      if (!isInMonth(sp.date, ym)) continue;
+      const mid = sp.linkedMovementId;
+      if (typeof mid === "string" && mid) movementIdsFromVariableSpends.add(mid);
+    }
+  }
   let sum = 0;
   for (const m of state.movements) {
     if (!isInMonth(m.date, ym)) continue;
     if (m.kind !== "expense") continue;
-    if (m.nature !== "variable") continue;
-    sum += m.amount;
+    if (m.nature === "variable" || movementIdsFromVariableSpends.has(m.id)) {
+      sum += m.amount;
+    }
   }
   return sum;
 }
 
 /**
- * Projeção de saldo no mês: saldo atual do painel **sem** contar gastos variáveis já no fluxo
- * (substituídos pelos tetos) + entradas futuras pendentes no mês
- * − contas fixas ainda não no fluxo − **tetos** das contas variáveis.
+ * Projeção de saldo no mês:
+ * - O **saldo / saídas totais** do painel continuam a incluir todos os lançamentos do fluxo (incl. variáveis).
+ * - Aqui **remove-se** do ponto de partida o efeito dos gastos variáveis no fluxo e **subtraem-se só os tetos**,
+ *   para não contar variável duas vezes (real no fluxo + teto na projeção).
  */
 export function computeProjectedMonthBalance(state: AppState, ym: string): number {
   const balance = computeMonthDashboardBalance(state, ym);
