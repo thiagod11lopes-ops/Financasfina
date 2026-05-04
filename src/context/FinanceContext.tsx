@@ -10,7 +10,15 @@ import {
 } from "react";
 import type { User } from "firebase/auth";
 import type { DocumentSnapshot } from "firebase/firestore";
-import { doc, getDocFromServer, getFirestore, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
+import {
+  doc,
+  getDocFromServer,
+  getFirestore,
+  increment,
+  onSnapshot,
+  serverTimestamp,
+  setDoc,
+} from "firebase/firestore";
 import { firestoreTimestampMs } from "../firebase/firestoreTime";
 import type {
   AppState,
@@ -136,6 +144,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   /** Evita sobrescrever edições locais com snapshots antigos (cache / fora de ordem). */
   const lastPayloadRemoteMsRef = useRef(0);
   const lastPayloadRemoteJsonRef = useRef("");
+  /** Monotónico vindo do Firestore (`increment`); rejeita snapshots antigos sem timestamp válido. */
+  const lastPayloadWriteSeqRef = useRef(0);
   /** Após aplicar estado vindo do Firestore, não regravar o mesmo documento (efeito debounced). */
   const skipNextFinancePersistRef = useRef(false);
   /**
@@ -187,6 +197,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         payload,
         updatedAt: serverTimestamp(),
         payloadUpdatedAt: serverTimestamp(),
+        payloadWriteSeq: increment(1),
       },
       { merge: true },
     ).catch((err) => {
@@ -201,7 +212,20 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (online && snap.metadata.fromCache && !snap.metadata.hasPendingWrites) {
       return;
     }
+    const remoteWriteSeq =
+      typeof data.payloadWriteSeq === "number" &&
+      Number.isFinite(data.payloadWriteSeq) &&
+      data.payloadWriteSeq >= 0
+        ? data.payloadWriteSeq
+        : 0;
+    if (remoteWriteSeq < lastPayloadWriteSeqRef.current) {
+      return;
+    }
     const allowPersistAfterRemote = () => {
+      lastPayloadWriteSeqRef.current = Math.max(
+        lastPayloadWriteSeqRef.current,
+        remoteWriteSeq,
+      );
       allowFinanceCloudPersistRef.current = true;
     };
     const payloadTimeMs =
@@ -262,6 +286,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     lastPayloadRemoteMsRef.current = 0;
     lastPayloadRemoteJsonRef.current = "";
+    lastPayloadWriteSeqRef.current = 0;
     localEntityBirthRef.current.clear();
     allowFinanceCloudPersistRef.current = false;
     const uid = fbUser?.uid;
@@ -288,7 +313,104 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
   }, [fbUser]);
 
-  /** Puxa do servidor antes de confiar no listener (evita snapshot só da IndexedDB). */
+  /**
+   * 1) Lê o documento no servidor (await) antes de registar o listener — evita que o 1.º evento
+   * seja só cache IndexedDB e sobrescreva o estado / a nuvem.
+   * 2) Depois mantém `onSnapshot` para atualizações em tempo real.
+   */
+  useEffect(() => {
+    if (!fbConfigured || !authReady || !fbUser) return;
+    const app = getFirebaseApp();
+    if (!app) return;
+    const db = getFirestore(app);
+    const ref = doc(db, "userFinances", fbUser.uid);
+    let cancelled = false;
+    let unsub: (() => void) | null = null;
+
+    void (async () => {
+      try {
+        const serverSnap = await getDocFromServer(ref);
+        if (cancelled) return;
+
+        if (!serverSnap.exists()) {
+          const payload = networkOnlineRef.current
+            ? reviveAppStateFromUnknown({ ...FINANCES_EMPTY_STATE })
+            : reviveAppStateFromUnknown(stateRef.current);
+          try {
+            await setDoc(
+              ref,
+              {
+                version: 1,
+                payload,
+                updatedAt: serverTimestamp(),
+                payloadUpdatedAt: serverTimestamp(),
+                payloadWriteSeq: increment(1),
+              },
+              { merge: true },
+            );
+          } catch (err) {
+            console.error("[Finanças Firestore bootstrap]", err);
+          }
+          if (cancelled) return;
+          skipNextFinancePersistRef.current = true;
+          setState(payload);
+          allowFinanceCloudPersistRef.current = true;
+          lastPayloadWriteSeqRef.current = Math.max(lastPayloadWriteSeqRef.current, 1);
+        } else {
+          const data = serverSnap.data() as Record<string, unknown>;
+          if (data.payload != null) {
+            tryApplyRemoteFinanceDoc(data, serverSnap);
+          }
+        }
+      } catch (e) {
+        console.warn("[Finanças] hidratação inicial (getDocFromServer)", e);
+      }
+
+      if (cancelled) return;
+
+      let firstSnapshot = true;
+      unsub = onSnapshot(
+        ref,
+        (snap) => {
+          if (cancelled) return;
+          if (!snap.exists()) {
+            if (firstSnapshot) {
+              firstSnapshot = false;
+              const payload = networkOnlineRef.current
+                ? reviveAppStateFromUnknown({ ...FINANCES_EMPTY_STATE })
+                : reviveAppStateFromUnknown(stateRef.current);
+              void setDoc(
+                ref,
+                {
+                  version: 1,
+                  payload,
+                  updatedAt: serverTimestamp(),
+                  payloadUpdatedAt: serverTimestamp(),
+                  payloadWriteSeq: increment(1),
+                },
+                { merge: true },
+              ).catch((err) => console.error("[Finanças Firestore bootstrap]", err));
+            }
+            return;
+          }
+          firstSnapshot = false;
+          tryApplyRemoteFinanceDoc(snap.data() as Record<string, unknown>, snap);
+        },
+        (err) => console.error("[Finanças Firestore]", err),
+      );
+      if (cancelled) {
+        unsub();
+        unsub = null;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, [fbConfigured, authReady, fbUser, tryApplyRemoteFinanceDoc]);
+
+  /** Ao voltar ao primeiro plano / rede: força leitura no servidor (complementa o listener). */
   useEffect(() => {
     if (!fbConfigured || !authReady || !fbUser) return;
     const app = getFirebaseApp();
@@ -306,7 +428,6 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           console.warn("[Finanças] pull servidor (getDocFromServer)", e);
         });
     };
-    pullFromServer();
     const onVis = () => {
       if (document.visibilityState === "visible") pullFromServer();
     };
@@ -317,43 +438,6 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("online", pullFromServer);
     };
-  }, [fbConfigured, authReady, fbUser, tryApplyRemoteFinanceDoc]);
-
-  useEffect(() => {
-    if (!fbConfigured || !authReady || !fbUser) return;
-    const app = getFirebaseApp();
-    if (!app) return;
-    const db = getFirestore(app);
-    const ref = doc(db, "userFinances", fbUser.uid);
-    let firstSnapshot = true;
-    const unsub = onSnapshot(
-      ref,
-      (snap) => {
-        if (!snap.exists()) {
-          if (firstSnapshot) {
-            firstSnapshot = false;
-            const payload = networkOnlineRef.current
-              ? reviveAppStateFromUnknown({ ...FINANCES_EMPTY_STATE })
-              : reviveAppStateFromUnknown(stateRef.current);
-            void setDoc(
-              ref,
-              {
-                version: 1,
-                payload,
-                updatedAt: serverTimestamp(),
-                payloadUpdatedAt: serverTimestamp(),
-              },
-              { merge: true },
-            ).catch((err) => console.error("[Finanças Firestore bootstrap]", err));
-          }
-          return;
-        }
-        firstSnapshot = false;
-        tryApplyRemoteFinanceDoc(snap.data() as Record<string, unknown>, snap);
-      },
-      (err) => console.error("[Finanças Firestore]", err),
-    );
-    return () => unsub();
   }, [fbConfigured, authReady, fbUser, tryApplyRemoteFinanceDoc]);
 
   useEffect(() => {
