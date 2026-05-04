@@ -36,6 +36,7 @@ import {
   pruneOrphanBirthIds,
 } from "../finance/mergeRemoteSnapshot";
 import { FINANCES_EMPTY_STATE, reviveAppStateFromUnknown } from "../finance/reviveAppState";
+import { stripUndefinedDeep } from "../finance/stripUndefinedDeep";
 import { useAuth } from "../firebase/AuthProvider";
 import { getFirebaseApp } from "../firebase/config";
 import {
@@ -234,7 +235,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         }
 
         pruneOrphanBirthIds(localEntityBirthRef.current, stateRef.current);
-        const payload = reviveAppStateFromUnknown(stateRef.current);
+        const payload = stripUndefinedDeep(reviveAppStateFromUnknown(stateRef.current));
         await setDoc(
           ref,
           {
@@ -388,9 +389,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
 
         if (!serverSnap.exists()) {
-          const payload = networkOnlineRef.current
-            ? reviveAppStateFromUnknown({ ...FINANCES_EMPTY_STATE })
-            : reviveAppStateFromUnknown(stateRef.current);
+          const payload = stripUndefinedDeep(
+            networkOnlineRef.current
+              ? reviveAppStateFromUnknown({ ...FINANCES_EMPTY_STATE })
+              : reviveAppStateFromUnknown(stateRef.current),
+          );
           try {
             await setDoc(
               ref,
@@ -431,9 +434,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           if (!snap.exists()) {
             if (firstSnapshot) {
               firstSnapshot = false;
-              const payload = networkOnlineRef.current
-                ? reviveAppStateFromUnknown({ ...FINANCES_EMPTY_STATE })
-                : reviveAppStateFromUnknown(stateRef.current);
+              const payload = stripUndefinedDeep(
+                networkOnlineRef.current
+                  ? reviveAppStateFromUnknown({ ...FINANCES_EMPTY_STATE })
+                  : reviveAppStateFromUnknown(stateRef.current),
+              );
               void setDoc(
                 ref,
                 {
