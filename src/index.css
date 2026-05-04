@@ -1170,6 +1170,11 @@ textarea {
   color: var(--expense);
 }
 
+.stat-pill.expense strong .stat-pill__var-spend-sum {
+  color: #fff;
+  font-weight: 600;
+}
+
 .form-row {
   display: flex;
   flex-direction: column;

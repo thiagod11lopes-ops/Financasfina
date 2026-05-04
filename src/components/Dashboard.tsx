@@ -127,6 +127,10 @@ export function Dashboard({ visible = true }: { visible?: boolean }) {
     }
     const fixedPlanned = state.fixedAccounts.reduce((a, x) => a + x.monthlyAmount, 0);
     const variableBudgetTotal = sumVariableBudgetLimitsTotal(state);
+    const variableSpendGrandTotal = state.variableAccounts.reduce((acc, v) => {
+      const t = (v.spends ?? []).reduce((s, sp) => s + sp.amount, 0);
+      return acc + t;
+    }, 0);
     const totalOut = expenseFlow + market + fuel;
     const balance = income - totalOut;
     return {
@@ -138,6 +142,7 @@ export function Dashboard({ visible = true }: { visible?: boolean }) {
       balance,
       fixedPlanned,
       variableBudgetTotal,
+      variableSpendGrandTotal,
     };
   }, [state, activeKey]);
 
@@ -443,7 +448,13 @@ export function Dashboard({ visible = true }: { visible?: boolean }) {
         </div>
         <div className="stat-pill expense">
           <span>Gastos variáveis (teto total)</span>
-          <strong>{formatBRL(stats.variableBudgetTotal)}</strong>
+          <strong>
+            {formatBRL(stats.variableBudgetTotal)}
+            <span className="stat-pill__var-spend-sum">
+              {" "}
+              · {formatBRL(stats.variableSpendGrandTotal)}
+            </span>
+          </strong>
         </div>
         <div className="stat-pill income">
           <span>A receber no mês</span>
