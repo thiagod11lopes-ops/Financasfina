@@ -100,6 +100,15 @@ export function sumPendingFutureIncomesForMonth(state: AppState, ym: string): nu
   return sum;
 }
 
+/** Soma de todos os tetos (`budgetLimit`) definidos nas contas variáveis. */
+export function sumVariableBudgetLimitsTotal(state: AppState): number {
+  return state.variableAccounts.reduce((acc, v) => {
+    const lim = v.budgetLimit;
+    if (lim == null || lim <= 0) return acc;
+    return acc + lim;
+  }, 0);
+}
+
 /** Soma do teto ainda pendente no mês (teto - gastos variáveis já lançados no fluxo). */
 export function sumVariableBudgetPendingForMonth(state: AppState, ym: string): number {
   if (!/^\d{4}-\d{2}$/.test(ym)) return 0;
@@ -118,7 +127,7 @@ export function sumVariableBudgetPendingForMonth(state: AppState, ym: string): n
 
 /**
  * Projeção de saldo no mês: saldo atual do painel + entradas futuras pendentes previstas no mês
- * − soma das contas fixas ainda não marcadas no fluxo − teto variável ainda pendente no mês.
+ * − soma das contas fixas ainda não marcadas no fluxo − **tetos totais** das contas variáveis.
  */
 export function computeProjectedMonthBalance(state: AppState, ym: string): number {
   const balance = computeMonthDashboardBalance(state, ym);
@@ -127,8 +136,8 @@ export function computeProjectedMonthBalance(state: AppState, ym: string): numbe
     if (x.inFlow) return a;
     return a + x.monthlyAmount;
   }, 0);
-  const variableBudgetPending = sumVariableBudgetPendingForMonth(state, ym);
-  return balance + pendingFuture - fixedPlannedPending - variableBudgetPending;
+  const variableBudgetTotal = sumVariableBudgetLimitsTotal(state);
+  return balance + pendingFuture - fixedPlannedPending - variableBudgetTotal;
 }
 
 /** Saldo do painel (entradas − fluxo − mercado − combustível), igual ao card Início. */

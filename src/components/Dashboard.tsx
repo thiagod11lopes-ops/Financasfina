@@ -9,6 +9,7 @@ import {
   monthKey,
   parseMoney,
   sumPendingFutureIncomesForMonth,
+  sumVariableBudgetLimitsTotal,
 } from "../utils/format";
 import { AgendaModal } from "./AgendaModal";
 import { IconAgenda, IconCalendar, IconChevronLeft, IconChevronRight, IconPlus, IconX } from "./Icons";
@@ -125,14 +126,7 @@ export function Dashboard({ visible = true }: { visible?: boolean }) {
       if (isInMonth(f.date, key)) fuel += f.total;
     }
     const fixedPlanned = state.fixedAccounts.reduce((a, x) => a + x.monthlyAmount, 0);
-    let variableSpent = 0;
-    for (const acc of state.variableAccounts) {
-      for (const sp of acc.spends ?? []) {
-        if (!isInMonth(sp.date, key)) continue;
-        if (sp.amount <= 0) continue;
-        variableSpent += sp.amount;
-      }
-    }
+    const variableBudgetTotal = sumVariableBudgetLimitsTotal(state);
     const totalOut = expenseFlow + market + fuel;
     const balance = income - totalOut;
     return {
@@ -143,7 +137,7 @@ export function Dashboard({ visible = true }: { visible?: boolean }) {
       totalOut,
       balance,
       fixedPlanned,
-      variableSpent,
+      variableBudgetTotal,
     };
   }, [state, activeKey]);
 
@@ -448,8 +442,8 @@ export function Dashboard({ visible = true }: { visible?: boolean }) {
           <strong>{formatBRL(stats.fixedPlanned)}</strong>
         </div>
         <div className="stat-pill expense">
-          <span>Gatos Fixos Variaveis</span>
-          <strong>{formatBRL(stats.variableSpent)}</strong>
+          <span>Gastos variáveis (teto total)</span>
+          <strong>{formatBRL(stats.variableBudgetTotal)}</strong>
         </div>
         <div className="stat-pill income">
           <span>A receber no mês</span>
