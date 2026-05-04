@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BottomNav, type TabId } from "./components/BottomNav";
 import { Dashboard } from "./components/Dashboard";
 import { MovementsView } from "./components/MovementsView";
@@ -7,9 +7,16 @@ import { FutureIncomesView } from "./components/FutureIncomesView";
 import { SettingsView } from "./components/SettingsView";
 import { PageBranding } from "./components/PageBranding";
 import { CloudSyncBadge } from "./components/CloudSyncBadge";
+import { useFinance } from "./context/FinanceContext";
 
 export default function App() {
   const [tab, setTab] = useState<TabId>("home");
+  const { refreshFinanceFromCloud } = useFinance();
+
+  useEffect(() => {
+    if (tab !== "accounts" && tab !== "futureIncome") return;
+    refreshFinanceFromCloud();
+  }, [tab, refreshFinanceFromCloud]);
 
   return (
     <>

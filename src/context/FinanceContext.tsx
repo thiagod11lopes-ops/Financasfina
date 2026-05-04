@@ -90,6 +90,8 @@ type FinanceContextValue = {
   markFutureIncomeReceived: (id: string) => void;
   markFutureIncomePending: (id: string) => void;
   removeFutureIncome: (id: string) => void;
+  /** Força leitura do `payload` no servidor (complementa o listener; útil nas abas Contas / Entradas futuras). */
+  refreshFinanceFromCloud: () => void;
 };
 
 const FinanceContext = createContext<FinanceContextValue | null>(null);
@@ -160,6 +162,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const networkOnlineRef = useRef(
     typeof navigator !== "undefined" ? navigator.onLine : true,
   );
+  /** Permite pedir `getDocFromServer` fora do efeito (ex.: troca de aba na UI). */
+  const pullFinanceFromServerRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const sync = () => {
@@ -172,6 +176,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("online", sync);
       window.removeEventListener("offline", sync);
     };
+  }, []);
+
+  const refreshFinanceFromCloud = useCallback(() => {
+    pullFinanceFromServerRef.current?.();
   }, []);
 
   function touchLocalEntity(id: string) {
@@ -428,6 +436,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           console.warn("[Finanças] pull servidor (getDocFromServer)", e);
         });
     };
+    pullFinanceFromServerRef.current = pullFromServer;
     const onVis = () => {
       if (document.visibilityState === "visible") pullFromServer();
     };
@@ -435,6 +444,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     window.addEventListener("online", pullFromServer);
     return () => {
       cancelled = true;
+      pullFinanceFromServerRef.current = null;
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("online", pullFromServer);
     };
@@ -868,6 +878,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       markFutureIncomeReceived,
       markFutureIncomePending,
       removeFutureIncome,
+      refreshFinanceFromCloud,
     }),
     [
       state,
@@ -892,6 +903,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       markFutureIncomeReceived,
       markFutureIncomePending,
       removeFutureIncome,
+      refreshFinanceFromCloud,
     ],
   );
 

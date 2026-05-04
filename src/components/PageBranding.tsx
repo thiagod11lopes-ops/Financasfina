@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 
-const RUMO_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "svg"] as const;
+/** SVG em `public/RUMO.svg` primeiro para evitar 404 em cascata no GitHub Pages. */
+const RUMO_EXTENSIONS = ["svg", "webp", "png", "jpg", "jpeg"] as const;
 
 export function PageBranding() {
   const [i, setI] = useState(0);
