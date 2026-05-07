@@ -45,6 +45,12 @@ function addDays(d: Date, n: number): Date {
   return x;
 }
 
+/** Índice do dia para `repeatWeekdays`: 0 = segunda … 6 = domingo. */
+function weekdayIndexSegDom(d: Date): number {
+  const dow = d.getDay();
+  return dow === 0 ? 6 : dow - 1;
+}
+
 function monthGrid(year: number, month: number): { date: string; inMonth: boolean }[] {
   const first = new Date(year, month - 1, 1, 12, 0, 0, 0);
   const startMonday = startOfWeekMonday(first);
@@ -347,27 +353,31 @@ export function AgendaModal({ open, onClose }: Props) {
     return m;
   }, [data.reminders]);
 
-  const weekStart = useMemo(() => startOfWeekMonday(weekCursor), [weekCursor]);
-  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
+  /** Primeiro dia visível no quadro de rotina (par atual + seguinte); `weekCursor` avança/recua com as setas. */
+  const weekDays = useMemo(() => {
+    const anchor = new Date(weekCursor);
+    anchor.setHours(12, 0, 0, 0);
+    return [anchor, addDays(anchor, 1)];
+  }, [weekCursor]);
 
   const userColorMap = useMemo(() => loadUserColorMap(), [users]);
   const todosMergedBg = useMemo(() => getTodosMergedBackground(), [users]);
 
   const weekItemsByDayIndex = useMemo(() => {
     const map = new Map<number, { task: AgendaFamilyTask; recurring: boolean }[]>();
-    for (let i = 0; i < 7; i++) map.set(i, []);
-    const keys = weekDays.map((d) => toYMD(d));
-    for (const t of data.familyWeekTasks) {
-      if (isRecurringFamilyTask(t)) {
-        for (const wd of t.repeatWeekdays ?? []) {
-          if (wd >= 0 && wd <= 6) map.get(wd)!.push({ task: t, recurring: true });
+    map.set(0, []);
+    map.set(1, []);
+    for (let i = 0; i < 2; i++) {
+      const d = weekDays[i]!;
+      const ymd = toYMD(d);
+      const segDom = weekdayIndexSegDom(d);
+      for (const t of data.familyWeekTasks) {
+        if (isRecurringFamilyTask(t)) {
+          if ((t.repeatWeekdays ?? []).includes(segDom)) map.get(i)!.push({ task: t, recurring: true });
+        } else if (t.date === ymd) {
+          map.get(i)!.push({ task: t, recurring: false });
         }
-      } else if (t.date) {
-        const idx = keys.indexOf(t.date);
-        if (idx >= 0) map.get(idx)!.push({ task: t, recurring: false });
       }
-    }
-    for (let i = 0; i < 7; i++) {
       map.get(i)!.sort((a, b) => timeSortKey(a.task.time) - timeSortKey(b.task.time));
     }
     return map;
@@ -554,10 +564,10 @@ export function AgendaModal({ open, onClose }: Props) {
 
   const weekRangeLabel = useMemo(() => {
     const a = weekDays[0]!;
-    const b = weekDays[6]!;
-    const fa = a.toLocaleDateString("pt-BR", { day: "numeric", month: "short" });
-    const fb = b.toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" });
-    return `${fa} – ${fb}`;
+    const b = weekDays[1]!;
+    const fa = a.toLocaleDateString("pt-BR", { weekday: "short", day: "numeric", month: "short" });
+    const fb = b.toLocaleDateString("pt-BR", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+    return `${fa} · ${fb}`;
   }, [weekDays]);
 
   const weekSlotDetailTask = useMemo(() => {
@@ -773,8 +783,8 @@ export function AgendaModal({ open, onClose }: Props) {
                 <button
                   type="button"
                   className="agenda-icon-btn"
-                  aria-label="Semana anterior"
-                  onClick={() => setWeekCursor((d) => addDays(d, -7))}
+                  aria-label="Dias anteriores"
+                  onClick={() => setWeekCursor((d) => addDays(d, -1))}
                 >
                   <IconChevronLeft aria-hidden />
                 </button>
@@ -782,8 +792,8 @@ export function AgendaModal({ open, onClose }: Props) {
                 <button
                   type="button"
                   className="agenda-icon-btn"
-                  aria-label="Próxima semana"
-                  onClick={() => setWeekCursor((d) => addDays(d, 7))}
+                  aria-label="Próximos dias"
+                  onClick={() => setWeekCursor((d) => addDays(d, 1))}
                 >
                   <IconChevronRight aria-hidden />
                 </button>
@@ -1013,8 +1023,10 @@ export function AgendaModal({ open, onClose }: Props) {
               </div>
 
               <p className="agenda-week-board-hint">
-                Em cada dia vê-se só o <strong>horário</strong> e o <strong>integrante</strong>. Toque no horário para abrir
-                um painel com a atividade, notas e ações. Depois de salvar uma rotina, ela aparece nas colunas dos dias marcados.
+                São mostrados <strong>dois dias</strong> seguidos (ao abrir: hoje e amanhã); use as setas para mudar o par de
+                datas. Em cada dia vê-se só o <strong>horário</strong> e o <strong>integrante</strong>. Toque no horário para
+                abrir um painel com a atividade, notas e ações. Depois de salvar uma rotina, ela aparece nas colunas dos dias
+                marcados.
               </p>
 
               <div className="agenda-week-board">
