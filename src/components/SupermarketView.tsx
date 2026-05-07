@@ -34,7 +34,7 @@ export function SupermarketView({ embedded = false }: { embedded?: boolean }) {
     <>
       {!embedded && (
         <>
-          <h1 className="page-title">Supermercado</h1>
+          <h1 className="page-title">Lista de compras</h1>
         </>
       )}
 

@@ -1566,7 +1566,7 @@ textarea {
 .bottom-nav-inner {
   pointer-events: auto;
   display: flex;
-  max-width: 520px;
+  max-width: 600px;
   width: 100%;
   gap: 4px;
   padding: 6px;

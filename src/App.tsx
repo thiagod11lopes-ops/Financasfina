@@ -5,6 +5,7 @@ import { MovementsView } from "./components/MovementsView";
 import { AccountsView } from "./components/AccountsView";
 import { FutureIncomesView } from "./components/FutureIncomesView";
 import { SettingsView } from "./components/SettingsView";
+import { SupermarketView } from "./components/SupermarketView";
 import { PageBranding } from "./components/PageBranding";
 import { CloudSyncBadge } from "./components/CloudSyncBadge";
 import { useFinance } from "./context/FinanceContext";
@@ -14,7 +15,7 @@ export default function App() {
   const { refreshFinanceFromCloud } = useFinance();
 
   useEffect(() => {
-    if (tab !== "accounts" && tab !== "futureIncome") return;
+    if (tab !== "accounts" && tab !== "futureIncome" && tab !== "shoppingList") return;
     refreshFinanceFromCloud();
   }, [tab, refreshFinanceFromCloud]);
 
@@ -38,6 +39,9 @@ export default function App() {
         </section>
         <section className="app-tab-panel" hidden={tab !== "futureIncome"} aria-label="Entradas futuras">
           <FutureIncomesView />
+        </section>
+        <section className="app-tab-panel" hidden={tab !== "shoppingList"} aria-label="Lista de compras">
+          <SupermarketView />
         </section>
         <section className="app-tab-panel" hidden={tab !== "settings"} aria-label="Ajustes">
           <SettingsView visible={tab === "settings"} />

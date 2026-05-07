@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import { IconFlow, IconFutureIncome, IconHome, IconSettings, IconWallet } from "./Icons";
+import { IconCart, IconFlow, IconFutureIncome, IconHome, IconSettings, IconWallet } from "./Icons";
 
-export type TabId = "home" | "flow" | "accounts" | "futureIncome" | "settings";
+export type TabId = "home" | "flow" | "accounts" | "futureIncome" | "shoppingList" | "settings";
 
 const tabs: { id: TabId; label: ReactNode; Icon: typeof IconHome }[] = [
   { id: "home", label: "Início", Icon: IconHome },
@@ -17,6 +17,17 @@ const tabs: { id: TabId; label: ReactNode; Icon: typeof IconHome }[] = [
       </>
     ),
     Icon: IconFutureIncome,
+  },
+  {
+    id: "shoppingList",
+    label: (
+      <>
+        Lista de
+        <br />
+        compras
+      </>
+    ),
+    Icon: IconCart,
   },
   { id: "settings", label: "Ajustes", Icon: IconSettings },
 ];
@@ -38,7 +49,9 @@ export function BottomNav({
             className={active === id ? "active" : ""}
             onClick={() => onChange(id)}
             aria-current={active === id ? "page" : undefined}
-            title={id === "futureIncome" ? "Entradas Futuras" : undefined}
+            title={
+              id === "futureIncome" ? "Entradas Futuras" : id === "shoppingList" ? "Lista de compras" : undefined
+            }
           >
             <Icon aria-hidden />
             {label}
