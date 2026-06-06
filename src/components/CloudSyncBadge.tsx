@@ -28,11 +28,18 @@ export function CloudSyncBadge() {
   if (user) {
     return (
       <div
-        className="cloud-sync-badge cloud-sync-badge--sync"
+        className="cloud-sync-badge cloud-sync-badge--sync cloud-sync-badge--with-email"
         title="Sincronizado com o Firebase. Finanças, resumo, agenda e utilizadores seguem a última versão na nuvem (cópia local ao sair da conta)."
       >
-        <span className="cloud-sync-badge__dot" aria-hidden />
-        <span className="cloud-sync-badge__text">Nuvem ativa</span>
+        <div className="cloud-sync-badge__row">
+          <span className="cloud-sync-badge__dot" aria-hidden />
+          <span className="cloud-sync-badge__text">Nuvem ativa</span>
+        </div>
+        {user.email ? (
+          <span className="cloud-sync-badge__email" title={user.email}>
+            {user.email}
+          </span>
+        ) : null}
       </div>
     );
   }

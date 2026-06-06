@@ -22,7 +22,7 @@ export function AppTopBar({
     if (user?.email && user.uid) {
       try {
         const roomHash = await activateShoppingListSyncForUser(user.email, user.uid);
-        url = buildShoppingListUrl(roomHash);
+        url = buildShoppingListUrl(roomHash, user.email);
       } catch {
         /* abre mesmo sem prefs se o browser bloquear crypto/localStorage */
       }

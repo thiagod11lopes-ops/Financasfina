@@ -88,10 +88,37 @@ textarea {
   pointer-events: none;
 }
 
+.cloud-sync-badge__row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
+
 .cloud-sync-badge__text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.cloud-sync-badge--with-email {
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  max-width: min(240px, calc(100vw - 24px));
+  padding: 6px 10px;
+}
+
+.cloud-sync-badge__email {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.55rem;
+  font-weight: 500;
+  line-height: 1.2;
+  opacity: 0.92;
 }
 
 .cloud-sync-badge__dot {
@@ -151,7 +178,7 @@ textarea {
   display: flex;
   flex-direction: column;
   /* Espaço extra no topo para o badge da nuvem (fixo, centrado) não cobrir o branding */
-  padding: calc(max(12px, env(safe-area-inset-top)) + 34px) 16px
+  padding: calc(max(12px, env(safe-area-inset-top)) + 48px) 16px
     calc(var(--nav-h) + env(safe-area-inset-bottom) + 12px);
   max-width: 520px;
   margin: 0 auto;

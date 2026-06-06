@@ -1,5 +1,6 @@
 /** Chave partilhada com a app Lista de Compras (mesma origem no GitHub Pages). */
 export const SHOPPING_LIST_SYNC_PREFS_KEY = "lista-compras:syncPrefs";
+export const SHOPPING_LIST_ACCOUNT_EMAIL_KEY = "lista-compras:financasAccountEmail";
 
 export const SHOPPING_LIST_URL = "https://thiagod11lopes-ops.github.io/Lista-de-Compras/";
 
@@ -27,16 +28,27 @@ export function saveShoppingListSyncPrefs(prefs: ShoppingListSyncPrefs): void {
   }
 }
 
+export function saveShoppingListAccountEmail(email: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(SHOPPING_LIST_ACCOUNT_EMAIL_KEY, email.trim());
+  } catch {
+    /* quota / modo privado */
+  }
+}
+
 /** Liga a lista à conta Google (email + uid) antes de abrir a app externa. */
 export async function activateShoppingListSyncForUser(email: string, uid: string): Promise<string> {
   const roomHash = await hashShoppingListRoom(email, uid);
   saveShoppingListSyncPrefs({ ativo: true, roomHash });
+  saveShoppingListAccountEmail(email);
   return roomHash;
 }
 
-export function buildShoppingListUrl(roomHash?: string | null): string {
-  if (!roomHash) return SHOPPING_LIST_URL;
+export function buildShoppingListUrl(roomHash?: string | null, email?: string | null): string {
   const url = new URL(SHOPPING_LIST_URL);
-  url.searchParams.set("roomHash", roomHash);
+  if (roomHash) url.searchParams.set("roomHash", roomHash);
+  if (email) url.searchParams.set("accountEmail", email.trim());
+  if (!roomHash && !email) return SHOPPING_LIST_URL;
   return url.toString();
 }
