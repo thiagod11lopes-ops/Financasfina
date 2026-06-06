@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../firebase/AuthProvider";
+import {
+  clearGoogleRedirectPending,
+  isGoogleRedirectPending,
+  markGoogleRedirectPending,
+} from "../firebase/loginRedirectState";
 
 const DISMISS_KEY = "financas-login-prompt-dismissed";
 
@@ -7,7 +12,7 @@ export function useGoogleLoginPrompt(): {
   open: boolean;
   dismiss: () => void;
 } {
-  const { configured, ready, redirectResolving, user } = useAuth();
+  const { configured, ready, authInitializing, user } = useAuth();
   const [dismissed, setDismissed] = useState(() => {
     if (typeof window === "undefined") return false;
     try {
@@ -16,6 +21,14 @@ export function useGoogleLoginPrompt(): {
       return false;
     }
   });
+  const [redirectPending, setRedirectPending] = useState(isGoogleRedirectPending);
+
+  useEffect(() => {
+    if (user) {
+      clearGoogleRedirectPending();
+      setRedirectPending(false);
+    }
+  }, [user]);
 
   const dismiss = useCallback(() => {
     try {
@@ -26,7 +39,14 @@ export function useGoogleLoginPrompt(): {
     setDismissed(true);
   }, []);
 
-  const open = configured && ready && !redirectResolving && !user && !dismissed;
+  const open =
+    configured &&
+    ready &&
+    !authInitializing &&
+    !redirectPending &&
+    !user &&
+    !dismissed;
+
   return { open, dismiss };
 }
 
@@ -53,9 +73,11 @@ export function GoogleLoginPromptModal({
 
   async function handleSignIn() {
     setBusy(true);
+    markGoogleRedirectPending();
     try {
       await signInWithGoogle();
-    } finally {
+    } catch {
+      clearGoogleRedirectPending();
       setBusy(false);
     }
   }

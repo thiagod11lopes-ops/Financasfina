@@ -18,6 +18,7 @@ import {
 } from "firebase/auth";
 import { getFirebaseAuth } from "./auth";
 import { isFirebaseConfigured } from "./config";
+import { clearGoogleRedirectPending, isGoogleRedirectPending } from "./loginRedirectState";
 
 function isIOSDevice(): boolean {
   if (typeof navigator === "undefined") return false;
@@ -75,8 +76,8 @@ type AuthContextValue = {
   configured: boolean;
   /** `true` depois da primeira resolução do estado de sessão (ou logo se Firebase desligado). */
   ready: boolean;
-  /** Aguarda o retorno do redirect da Google (evita modal de login no iPhone a meio do fluxo). */
-  redirectResolving: boolean;
+  /** Aguarda redirect + primeira emissão do listener (evita modal a reabrir no iPhone). */
+  authInitializing: boolean;
   user: User | null;
   signInWithGoogle: () => Promise<void>;
   signOutUser: () => Promise<void>;
@@ -88,22 +89,31 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const configured = useMemo(() => isFirebaseConfigured(), []);
   const [ready, setReady] = useState(false);
-  const [redirectResolving, setRedirectResolving] = useState(configured);
+  const [authInitializing, setAuthInitializing] = useState(configured);
   const [user, setUser] = useState<User | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!configured) {
-      setRedirectResolving(false);
+      setAuthInitializing(false);
       setReady(true);
       return;
     }
     const auth = getFirebaseAuth();
     if (!auth) {
-      setRedirectResolving(false);
+      setAuthInitializing(false);
       setReady(true);
       return;
     }
+
+    let redirectChecked = false;
+    let sawAuthAfterRedirect = false;
+
+    const finishAuthInit = () => {
+      if (redirectChecked && sawAuthAfterRedirect) {
+        setAuthInitializing(false);
+      }
+    };
 
     void (async () => {
       try {
@@ -117,14 +127,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setLastError(formatAuthError(e));
           console.warn("[Firebase auth redirect]", e);
         }
+        clearGoogleRedirectPending();
       } finally {
-        setRedirectResolving(false);
+        redirectChecked = true;
+        if (!isGoogleRedirectPending()) {
+          sawAuthAfterRedirect = true;
+        }
+        finishAuthInit();
       }
     })();
 
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setReady(true);
+      if (u) {
+        clearGoogleRedirectPending();
+        sawAuthAfterRedirect = true;
+      } else if (redirectChecked) {
+        sawAuthAfterRedirect = true;
+      }
+      finishAuthInit();
     });
     return () => unsub();
   }, [configured]);
@@ -143,6 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       try {
         await signInWithPopup(auth, provider);
+        clearGoogleRedirectPending();
       } catch (popupErr: unknown) {
         const code =
           typeof popupErr === "object" && popupErr !== null && "code" in popupErr
@@ -152,9 +175,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await signInWithRedirect(auth, provider);
           return;
         }
+        clearGoogleRedirectPending();
         throw popupErr;
       }
     } catch (e) {
+      clearGoogleRedirectPending();
       setLastError(formatAuthError(e));
     }
   }, [configured]);
@@ -166,6 +191,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!auth) return;
     try {
       await signOut(auth);
+      clearGoogleRedirectPending();
     } catch (e) {
       setLastError(formatAuthError(e));
     }
@@ -175,13 +201,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       configured,
       ready,
-      redirectResolving,
+      authInitializing,
       user,
       signInWithGoogle,
       signOutUser,
       lastError,
     }),
-    [configured, ready, redirectResolving, user, signInWithGoogle, signOutUser, lastError],
+    [configured, ready, authInitializing, user, signInWithGoogle, signOutUser, lastError],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
