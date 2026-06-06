@@ -37,11 +37,7 @@ export function getFirebaseApp(): FirebaseApp | null {
     messagingSenderId: envStr("VITE_FIREBASE_MESSAGING_SENDER_ID"),
     appId: envStr("VITE_FIREBASE_APP_ID"),
   };
-  if (getApps().length > 0) {
-    cached = getApps()[0]!;
-  } else {
-    cached = initializeApp(config);
-    initFirebaseAuth(cached);
-  }
+  cached = getApps().length > 0 ? getApps()[0]! : initializeApp(config);
+  initFirebaseAuth(cached);
   return cached;
 }

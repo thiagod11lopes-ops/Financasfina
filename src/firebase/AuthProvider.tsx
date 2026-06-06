@@ -17,7 +17,11 @@ import {
 } from "firebase/auth";
 import { getFirebaseAuth, resolveGoogleRedirectOnce } from "./auth";
 import { isFirebaseConfigured } from "./config";
-import { clearGoogleRedirectPending, isGoogleRedirectPending } from "./loginRedirectState";
+import {
+  clearGoogleRedirectPending,
+  isGoogleRedirectPending,
+  markGoogleRedirectPending,
+} from "./loginRedirectState";
 import { PWA_IOS_LOGIN_MESSAGE, requiresBrowserForGoogleLogin } from "../utils/pwa";
 
 const AUTH_INIT_TIMEOUT_MS = 12_000;
@@ -105,6 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const auth = getFirebaseAuth();
     if (!auth) {
+      setLastError("Não foi possível iniciar a autenticação Firebase.");
       setAuthInitializing(false);
       setReady(true);
       return;
@@ -149,13 +154,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearGoogleRedirectPending();
       })
       .finally(() => {
-      if (cancelled) return;
-      redirectChecked = true;
-      if (!isGoogleRedirectPending()) {
-        sawAuthAfterRedirect = true;
-      }
-      finishAuthInit();
-    });
+        if (cancelled) return;
+        redirectChecked = true;
+        if (!isGoogleRedirectPending()) {
+          sawAuthAfterRedirect = true;
+        }
+        finishAuthInit();
+      });
 
     const unsub = onAuthStateChanged(auth, (u) => {
       if (cancelled) return;
@@ -186,15 +191,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     const auth = getFirebaseAuth();
-    if (!auth) return;
+    if (!auth) {
+      setLastError("Não foi possível iniciar a autenticação Firebase.");
+      return;
+    }
     try {
       const provider = new GoogleAuthProvider();
       if (!shouldUseGoogleRedirect()) {
         provider.setCustomParameters({ prompt: "select_account" });
       }
       if (shouldUseGoogleRedirect()) {
-        /* Não await: no PWA o redirect navega a página; await pendurado trava o botão. */
-        void signInWithRedirect(auth, provider);
+        markGoogleRedirectPending();
+        await signInWithRedirect(auth, provider);
         return;
       }
       try {
@@ -206,7 +214,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             ? String((popupErr as { code: string }).code)
             : "";
         if (isPopupAuthError(code)) {
-          void signInWithRedirect(auth, provider);
+          markGoogleRedirectPending();
+          await signInWithRedirect(auth, provider);
           return;
         }
         clearGoogleRedirectPending();

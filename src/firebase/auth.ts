@@ -1,4 +1,5 @@
 import type { FirebaseApp } from "firebase/app";
+import { getFirebaseApp } from "./config";
 import {
   browserLocalPersistence,
   browserPopupRedirectResolver,
@@ -42,6 +43,9 @@ export function initFirebaseAuth(app: FirebaseApp): Auth {
 }
 
 export function getFirebaseAuth(): Auth | null {
+  if (cachedAuth) return cachedAuth;
+  const app = getFirebaseApp();
+  if (!app) return null;
   return cachedAuth;
 }
 
