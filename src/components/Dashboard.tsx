@@ -10,9 +10,31 @@ import {
   parseMoney,
   sumPendingFutureIncomesForMonth,
   sumVariableBudgetLimitsTotal,
+  variableSpendTitleForDate,
 } from "../utils/format";
 import { AgendaModal } from "./AgendaModal";
+import { DashboardExplainModal } from "./DashboardExplainModal";
+import type { DashboardMetricKey } from "./dashboardMetricExplain";
+import { DashboardStats } from "./DashboardStats";
+import { BudgetLimitExceededModal } from "./BudgetLimitExceededModal";
+import { ExpenseAccountCombobox } from "./ExpenseAccountCombobox";
+import { FixedAmountOverrideModal } from "./FixedAmountOverrideModal";
+import {
+  buildExpenseAccountOptions,
+  expenseAccountLabel,
+  expenseExtraDescription,
+  findExpenseOptionByLabel,
+  findFixedAccount,
+  findRecurringAccount,
+  findVariableAccount,
+  sumAccountSpendsInMonth,
+  willExceedBudgetLimit,
+  type ExpenseAccountKind,
+  type ExpenseAccountOption,
+  type ExpenseAccountTarget,
+} from "./expenseAccountPicker";
 import { IconAgenda, IconCalendar, IconChevronLeft, IconChevronRight, IconPlus, IconX } from "./Icons";
+import { MovementSuccessModal, type MovementSuccessKind } from "./MovementSuccessModal";
 import { MonthYearPickerModal } from "./MonthYearPickerModal";
 import {
   DASH_TABS_SYNC_EVENT,
@@ -20,7 +42,25 @@ import {
   saveDashboardTabs,
 } from "../dashboardTabs";
 import { useUserDocCloud } from "../firebase/userDocCloud";
+import type { FixedAccount } from "../types";
 import { USERS_ALL_OPTION, USERS_SYNC_EVENT, loadUsers } from "../users";
+
+type FixedAmountOverridePrompt = {
+  accountId: string;
+  accountName: string;
+  currentAmount: number;
+  newAmount: number;
+};
+
+type BudgetLimitExceededPrompt = {
+  kind: Extract<ExpenseAccountKind, "variable" | "recurring">;
+  accountId: string;
+  accountName: string;
+  budgetLimit: number;
+  monthSpent: number;
+  newAmount: number;
+  extraDesc?: string;
+};
 
 function entryDateForMonth(ym: string): string {
   const today = new Date().toISOString().slice(0, 10);
@@ -30,26 +70,72 @@ function entryDateForMonth(ym: string): string {
 
 export function Dashboard({ visible = true }: { visible?: boolean }) {
   const cloud = useUserDocCloud();
-  const { state, bootstrapNewMonth, addMovement } = useFinance();
+  const {
+    state,
+    bootstrapNewMonth,
+    addMovement,
+    removeMovement,
+    updateFixedAccount,
+    addVariableSpend,
+    addRecurringSpend,
+  } = useFinance();
   const [tabs, setTabs] = useState<string[]>(() => loadDashboardTabs().tabs);
   const [activeKey, setActiveKey] = useState<string>(() => loadDashboardTabs().active);
   const [newMonth, setNewMonth] = useState(() => monthKey(new Date()));
   const [pickerOpen, setPickerOpen] = useState(false);
   const [agendaOpen, setAgendaOpen] = useState(false);
   const [balanceModalKind, setBalanceModalKind] = useState<null | "income" | "expense">(null);
+  const [explainMetric, setExplainMetric] = useState<DashboardMetricKey | null>(null);
   const [addAmount, setAddAmount] = useState("");
   const [addDesc, setAddDesc] = useState("");
+  const [expenseTarget, setExpenseTarget] = useState<ExpenseAccountTarget | null>(null);
+  const [fixedAmountPrompt, setFixedAmountPrompt] = useState<FixedAmountOverridePrompt | null>(null);
+  const [budgetLimitPrompt, setBudgetLimitPrompt] = useState<BudgetLimitExceededPrompt | null>(null);
+  const [movementSuccess, setMovementSuccess] = useState<MovementSuccessKind | null>(null);
   const [balanceResponsible, setBalanceResponsible] = useState(USERS_ALL_OPTION);
   const [users, setUsers] = useState<string[]>(() => loadUsers());
 
   const balanceModalOpen = balanceModalKind !== null;
 
   useEffect(() => {
-    if (!balanceModalOpen) return;
+    if (!balanceModalOpen) {
+      setFixedAmountPrompt(null);
+      setBudgetLimitPrompt(null);
+      return;
+    }
     setAddAmount("");
     setAddDesc("");
+    setExpenseTarget(null);
+    setFixedAmountPrompt(null);
+    setBudgetLimitPrompt(null);
     setBalanceResponsible(USERS_ALL_OPTION);
   }, [balanceModalOpen, balanceModalKind]);
+
+  const expenseAccountOptions = useMemo(() => buildExpenseAccountOptions(state), [state]);
+
+  const handleExpenseDescChange = useCallback(
+    (value: string) => {
+      setAddDesc(value);
+      const match = findExpenseOptionByLabel(expenseAccountOptions, value);
+      if (match) {
+        setExpenseTarget(match.target);
+        if (match.defaultAmount != null && match.defaultAmount > 0) {
+          setAddAmount(String(match.defaultAmount).replace(".", ","));
+        }
+        return;
+      }
+      if (!value.trim()) setExpenseTarget(null);
+    },
+    [expenseAccountOptions],
+  );
+
+  const handleExpenseOptionSelect = useCallback((opt: ExpenseAccountOption) => {
+    setAddDesc(opt.label);
+    setExpenseTarget(opt.target);
+    if (opt.defaultAmount != null && opt.defaultAmount > 0) {
+      setAddAmount(String(opt.defaultAmount).replace(".", ","));
+    }
+  }, []);
 
   useEffect(() => {
     const syncUsers = () => setUsers(loadUsers());
@@ -72,13 +158,20 @@ export function Dashboard({ visible = true }: { visible?: boolean }) {
   }, [balanceModalOpen]);
 
   useEffect(() => {
-    if (!balanceModalOpen) return;
+    if (!fixedAmountPrompt && !budgetLimitPrompt) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setBalanceModalKind(null);
+      if (e.key !== "Escape") return;
+      if (fixedAmountPrompt) {
+        setFixedAmountPrompt(null);
+        return;
+      }
+      if (budgetLimitPrompt) {
+        setBudgetLimitPrompt(null);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [balanceModalOpen]);
+  }, [budgetLimitPrompt, fixedAmountPrompt]);
 
   /** Ao mudar de aba na navegação inferior, fechar modais (scroll do body, foco, etc.). */
   useEffect(() => {
@@ -86,6 +179,10 @@ export function Dashboard({ visible = true }: { visible?: boolean }) {
     setPickerOpen(false);
     setAgendaOpen(false);
     setBalanceModalKind(null);
+    setFixedAmountPrompt(null);
+    setBudgetLimitPrompt(null);
+    setMovementSuccess(null);
+    setExplainMetric(null);
   }, [visible]);
 
   useEffect(() => {
@@ -127,10 +224,11 @@ export function Dashboard({ visible = true }: { visible?: boolean }) {
     }
     const fixedPlanned = state.fixedAccounts.reduce((a, x) => a + x.monthlyAmount, 0);
     const variableBudgetTotal = sumVariableBudgetLimitsTotal(state);
-    const variableSpendGrandTotal = state.variableAccounts.reduce((acc, v) => {
-      const t = (v.spends ?? []).reduce((s, sp) => s + sp.amount, 0);
-      return acc + t;
-    }, 0);
+    const sumVariableSpendsInMonth = (spends: { date: string; amount: number }[] | undefined) =>
+      (spends ?? []).reduce((s, sp) => (isInMonth(sp.date, key) ? s + sp.amount : s), 0);
+    const variableSpendGrandTotal =
+      state.variableAccounts.reduce((acc, v) => acc + sumVariableSpendsInMonth(v.spends), 0) +
+      state.recurringAccounts.reduce((acc, v) => acc + sumVariableSpendsInMonth(v.spends), 0);
     const totalOut = expenseFlow + market + fuel;
     const balance = income - totalOut;
     return {
@@ -194,32 +292,209 @@ export function Dashboard({ visible = true }: { visible?: boolean }) {
 
   const activeHeadline = useMemo(() => formatMonthHeadlinePt(activeKey), [activeKey]);
 
+  const completeBalanceMovement = useCallback((kind: MovementSuccessKind) => {
+    setBalanceModalKind(null);
+    setFixedAmountPrompt(null);
+    setBudgetLimitPrompt(null);
+    setMovementSuccess(kind);
+  }, []);
+
+  useEffect(() => {
+    if (!movementSuccess) return;
+    const timer = window.setTimeout(() => setMovementSuccess(null), 2000);
+    return () => window.clearTimeout(timer);
+  }, [movementSuccess]);
+
+  const commitFixedExpense = useCallback(
+    (account: FixedAccount, amount: number, updateMonthlyAmount?: number) => {
+      const date = entryDateForMonth(activeKey);
+      const responsible = balanceResponsible || USERS_ALL_OPTION;
+      if (account.linkedMovementId) removeMovement(account.linkedMovementId);
+      const movementId = addMovement({
+        kind: "expense",
+        amount,
+        title: account.name,
+        date,
+        nature: "fixed",
+        responsible,
+      });
+      updateFixedAccount(account.id, {
+        ...(updateMonthlyAmount != null ? { monthlyAmount: updateMonthlyAmount } : {}),
+        inFlow: true,
+        linkedMovementId: movementId,
+      });
+      completeBalanceMovement("expense");
+    },
+    [activeKey, addMovement, balanceResponsible, completeBalanceMovement, removeMovement, updateFixedAccount],
+  );
+
+  const confirmFixedAmountOverride = useCallback(() => {
+    if (!fixedAmountPrompt) return;
+    const account = findFixedAccount(state, fixedAmountPrompt.accountId);
+    if (!account) {
+      setFixedAmountPrompt(null);
+      return;
+    }
+    commitFixedExpense(account, fixedAmountPrompt.newAmount, fixedAmountPrompt.newAmount);
+  }, [commitFixedExpense, fixedAmountPrompt, state]);
+
+  const commitVariableExpense = useCallback(
+    (accountId: string, amount: number, extra?: string) => {
+      const date = entryDateForMonth(activeKey);
+      addVariableSpend(accountId, {
+        title: extra ?? variableSpendTitleForDate(date),
+        amount,
+        date,
+        notes: extra,
+      });
+      completeBalanceMovement("expense");
+    },
+    [activeKey, addVariableSpend, completeBalanceMovement],
+  );
+
+  const commitRecurringExpense = useCallback(
+    (accountId: string, amount: number, accountName: string, extra?: string) => {
+      const date = entryDateForMonth(activeKey);
+      addRecurringSpend(accountId, {
+        title: extra ? `${accountName} — ${extra}` : accountName,
+        amount,
+        date,
+        notes: extra,
+      });
+      completeBalanceMovement("expense");
+    },
+    [activeKey, addRecurringSpend, completeBalanceMovement],
+  );
+
+  const confirmBudgetLimitExceeded = useCallback(() => {
+    if (!budgetLimitPrompt) return;
+    if (budgetLimitPrompt.kind === "variable") {
+      commitVariableExpense(
+        budgetLimitPrompt.accountId,
+        budgetLimitPrompt.newAmount,
+        budgetLimitPrompt.extraDesc,
+      );
+      return;
+    }
+    commitRecurringExpense(
+      budgetLimitPrompt.accountId,
+      budgetLimitPrompt.newAmount,
+      budgetLimitPrompt.accountName,
+      budgetLimitPrompt.extraDesc,
+    );
+  }, [budgetLimitPrompt, commitRecurringExpense, commitVariableExpense]);
+
   const submitBalanceMovement = useCallback(
     (e: FormEvent) => {
       e.preventDefault();
       if (!balanceModalKind) return;
       const v = parseMoney(addAmount);
       if (v <= 0) return;
+      const date = entryDateForMonth(activeKey);
+      const responsible = balanceResponsible || USERS_ALL_OPTION;
+
       if (balanceModalKind === "income") {
         addMovement({
           kind: "income",
           amount: v,
           title: addDesc.trim() || "Entrada adicional",
-          date: entryDateForMonth(activeKey),
-          responsible: balanceResponsible || USERS_ALL_OPTION,
+          date,
+          responsible,
         });
-      } else {
-        addMovement({
-          kind: "expense",
-          amount: v,
-          title: addDesc.trim() || "Gasto adicional",
-          date: entryDateForMonth(activeKey),
-          responsible: balanceResponsible || USERS_ALL_OPTION,
-        });
+        completeBalanceMovement("income");
+        return;
       }
-      setBalanceModalKind(null);
+
+      const target =
+        expenseTarget ?? findExpenseOptionByLabel(expenseAccountOptions, addDesc)?.target ?? null;
+
+      if (target?.kind === "fixed") {
+        const account = findFixedAccount(state, target.accountId);
+        if (account) {
+          if (v > account.monthlyAmount) {
+            setFixedAmountPrompt({
+              accountId: account.id,
+              accountName: account.name,
+              currentAmount: account.monthlyAmount,
+              newAmount: v,
+            });
+            return;
+          }
+          commitFixedExpense(account, v);
+          return;
+        }
+      }
+
+      if (target?.kind === "variable") {
+        const account = findVariableAccount(state, target.accountId);
+        if (account) {
+          const defaultLabel = expenseAccountLabel("variable", account.name);
+          const extra = expenseExtraDescription(account.name, addDesc, defaultLabel);
+          const monthSpent = sumAccountSpendsInMonth(account.spends, activeKey);
+          if (willExceedBudgetLimit(account.budgetLimit, monthSpent, v)) {
+            setBudgetLimitPrompt({
+              kind: "variable",
+              accountId: account.id,
+              accountName: account.name,
+              budgetLimit: account.budgetLimit!,
+              monthSpent,
+              newAmount: v,
+              extraDesc: extra,
+            });
+            return;
+          }
+          commitVariableExpense(account.id, v, extra);
+          return;
+        }
+      }
+
+      if (target?.kind === "recurring") {
+        const account = findRecurringAccount(state, target.accountId);
+        if (account) {
+          const defaultLabel = expenseAccountLabel("recurring", account.name);
+          const extra = expenseExtraDescription(account.name, addDesc, defaultLabel);
+          const monthSpent = sumAccountSpendsInMonth(account.spends, activeKey);
+          if (willExceedBudgetLimit(account.budgetLimit, monthSpent, v)) {
+            setBudgetLimitPrompt({
+              kind: "recurring",
+              accountId: account.id,
+              accountName: account.name,
+              budgetLimit: account.budgetLimit!,
+              monthSpent,
+              newAmount: v,
+              extraDesc: extra,
+            });
+            return;
+          }
+          commitRecurringExpense(account.id, v, account.name, extra);
+          return;
+        }
+      }
+
+      addMovement({
+        kind: "expense",
+        amount: v,
+        title: addDesc.trim() || "Gasto adicional",
+        date,
+        responsible,
+      });
+      completeBalanceMovement("expense");
     },
-    [addAmount, addDesc, activeKey, addMovement, balanceModalKind, balanceResponsible],
+    [
+      addAmount,
+      addDesc,
+      activeKey,
+      addMovement,
+      balanceModalKind,
+      balanceResponsible,
+      commitFixedExpense,
+      commitRecurringExpense,
+      commitVariableExpense,
+      completeBalanceMovement,
+      expenseAccountOptions,
+      expenseTarget,
+      state,
+    ],
   );
 
   return (
@@ -306,55 +581,77 @@ export function Dashboard({ visible = true }: { visible?: boolean }) {
 
       <AgendaModal open={agendaOpen} onClose={() => setAgendaOpen(false)} />
 
-      <div
+      <section
         id="dash-panel"
-        className="card card-glow dash-balance-panel"
+        className="card card-glow dash-overview-hero"
         role="region"
         aria-label={`Resumo financeiro de ${formatMonthLabelPt(activeKey)}`}
       >
-        <div className="dash-balance-grid">
-          <span className="badge dash-balance-grid__badge">Saldo Atual</span>
-          <div className="dash-balance-grid__action-plus">
+        <div className="dash-overview-hero__balance">
+          <div className="dash-balance-grid">
             <button
               type="button"
-              className="dash-balance-add-btn"
-              onClick={() => setBalanceModalKind("income")}
-              aria-label="Adicionar entrada ao saldo atual"
-              title="Adicionar entrada"
+              className="dash-balance-tap"
+              onClick={() => setExplainMetric("balance")}
+              aria-label={`Saldo atual: ${formatBRL(stats.balance)}. Toque para saber mais.`}
             >
-              <IconPlus aria-hidden />
+              <span className="badge dash-balance-grid__badge">Saldo atual</span>
+              <p
+                className="dash-balance-value dash-balance-grid__value"
+                style={{
+                  color: stats.balance >= 0 ? "var(--income)" : "var(--expense)",
+                }}
+              >
+                {formatBRL(stats.balance)}
+              </p>
+              <span className="dash-balance-tap__chevron" aria-hidden>
+                ›
+              </span>
             </button>
-          </div>
-          <p
-            className="dash-balance-value dash-balance-grid__value"
-            style={{
-              color: stats.balance >= 0 ? "var(--income)" : "var(--expense)",
-            }}
-          >
-            {formatBRL(stats.balance)}
-          </p>
-          <div className="dash-balance-grid__action-minus">
-            <button
-              type="button"
-              className="dash-balance-subtract-btn"
-              onClick={() => setBalanceModalKind("expense")}
-              aria-label="Registrar gasto no fluxo do mês"
-              title="Registrar gasto"
-            >
-              <span aria-hidden>-</span>
-            </button>
+            <div className="dash-balance-grid__actions">
+              <button
+                type="button"
+                className="dash-balance-add-btn"
+                onClick={() => setBalanceModalKind("income")}
+                aria-label="Adicionar entrada ao saldo atual"
+                title="Adicionar entrada"
+              >
+                <IconPlus aria-hidden />
+              </button>
+              <button
+                type="button"
+                className="dash-balance-subtract-btn"
+                onClick={() => setBalanceModalKind("expense")}
+                aria-label="Registrar gasto no fluxo do mês"
+                title="Registrar gasto"
+              >
+                <span aria-hidden>-</span>
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+        <button
+          type="button"
+          className={`dash-overview-hero__projection dash-overview-hero__projection-btn${projectedBalance >= 0 ? " dash-overview-hero__projection--income" : " dash-overview-hero__projection--expense"}`}
+          onClick={() => setExplainMetric("projection")}
+          aria-label={`Projeção planeada: ${formatBRL(projectedBalance)}. Toque para saber mais.`}
+        >
+          <span className="dash-overview-hero__projection-label">Projeção planeada</span>
+          <strong className="dash-overview-hero__projection-value">{formatBRL(projectedBalance)}</strong>
+          <span className="dash-overview-hero__projection-hint">Fim do mês · 100% tetos</span>
+          <span className="dash-overview-hero__projection-chevron" aria-hidden>
+            ›
+          </span>
+        </button>
+      </section>
 
       {balanceModalOpen && balanceModalKind ? (
-        <div className="modal-backdrop" role="presentation" onClick={() => setBalanceModalKind(null)}>
+        <div className="modal-backdrop dash-balance-backdrop" role="presentation">
           <div
             className="modal-panel dash-balance-income-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="dash-balance-movement-title"
-            onClick={(ev) => ev.stopPropagation()}
           >
             <div className="modal-head">
               <div className="modal-head__text">
@@ -391,19 +688,33 @@ export function Dashboard({ visible = true }: { visible?: boolean }) {
                 />
               </div>
               <div className="form-row">
-                <label htmlFor="dash-movement-desc">Descrição (opcional)</label>
-                <input
-                  id="dash-movement-desc"
-                  className="input"
-                  value={addDesc}
-                  onChange={(e) => setAddDesc(e.target.value)}
-                  placeholder={
-                    balanceModalKind === "income"
-                      ? "Ex.: salário extra, reembolso…"
-                      : "Ex.: conta extra, compra avulsa…"
-                  }
-                  enterKeyHint="done"
-                />
+                <label htmlFor="dash-movement-desc">
+                  {balanceModalKind === "income" ? "Descrição (opcional)" : "Descrição"}
+                </label>
+                {balanceModalKind === "expense" ? (
+                  <>
+                    <ExpenseAccountCombobox
+                      id="dash-movement-desc"
+                      options={expenseAccountOptions}
+                      value={addDesc}
+                      selectedTarget={expenseTarget}
+                      onValueChange={handleExpenseDescChange}
+                      onSelectOption={handleExpenseOptionSelect}
+                    />
+                    <p className="form-row-hint">
+                      Escolha na lista ou digite livremente. O lançamento vincula automaticamente à conta.
+                    </p>
+                  </>
+                ) : (
+                  <input
+                    id="dash-movement-desc"
+                    className="input"
+                    value={addDesc}
+                    onChange={(e) => setAddDesc(e.target.value)}
+                    placeholder="Ex.: salário extra, reembolso…"
+                    enterKeyHint="done"
+                  />
+                )}
               </div>
               <div className="form-row">
                 <label htmlFor="dash-movement-user">Responsável</label>
@@ -433,38 +744,43 @@ export function Dashboard({ visible = true }: { visible?: boolean }) {
         </div>
       ) : null}
 
-      <div className="stat-grid" style={{ marginTop: 12 }}>
-        <div className="stat-pill income">
-          <span>Entradas</span>
-          <strong>{formatBRL(stats.income)}</strong>
-        </div>
-        <div className="stat-pill expense">
-          <span>Saídas totais</span>
-          <strong>{formatBRL(stats.totalOut)}</strong>
-        </div>
-        <div className="stat-pill">
-          <span>Gastos Fixas planejadas</span>
-          <strong>{formatBRL(stats.fixedPlanned)}</strong>
-        </div>
-        <div className="stat-pill expense">
-          <span>Gastos variáveis (teto total)</span>
-          <strong>
-            {formatBRL(stats.variableBudgetTotal)}
-            <span className="stat-pill__var-spend-sum">
-              {" "}
-              · {formatBRL(stats.variableSpendGrandTotal)}
-            </span>
-          </strong>
-        </div>
-        <div className="stat-pill income">
-          <span>A receber no mês</span>
-          <strong>{formatBRL(pendingFutureMonthTotal)}</strong>
-        </div>
-        <div className={projectedBalance >= 0 ? "stat-pill income" : "stat-pill expense"}>
-          <span>Projeção de saldo</span>
-          <strong>{formatBRL(projectedBalance)}</strong>
-        </div>
-      </div>
+      <DashboardStats
+        income={stats.income}
+        totalOut={stats.totalOut}
+        pendingFutureMonthTotal={pendingFutureMonthTotal}
+        fixedPlanned={stats.fixedPlanned}
+        variableBudgetTotal={stats.variableBudgetTotal}
+        variableSpendGrandTotal={stats.variableSpendGrandTotal}
+        onOpenExplain={setExplainMetric}
+      />
+
+      <DashboardExplainModal
+        metric={explainMetric}
+        monthLabel={formatMonthLabelPt(activeKey)}
+        onClose={() => setExplainMetric(null)}
+      />
+
+      <FixedAmountOverrideModal
+        open={fixedAmountPrompt !== null}
+        accountName={fixedAmountPrompt?.accountName ?? ""}
+        currentAmount={fixedAmountPrompt?.currentAmount ?? 0}
+        newAmount={fixedAmountPrompt?.newAmount ?? 0}
+        onCancel={() => setFixedAmountPrompt(null)}
+        onConfirm={confirmFixedAmountOverride}
+      />
+
+      <BudgetLimitExceededModal
+        open={budgetLimitPrompt !== null}
+        accountName={budgetLimitPrompt?.accountName ?? ""}
+        kind={budgetLimitPrompt?.kind ?? "variable"}
+        budgetLimit={budgetLimitPrompt?.budgetLimit ?? 0}
+        monthSpent={budgetLimitPrompt?.monthSpent ?? 0}
+        newAmount={budgetLimitPrompt?.newAmount ?? 0}
+        onCancel={() => setBudgetLimitPrompt(null)}
+        onConfirm={confirmBudgetLimitExceeded}
+      />
+
+      <MovementSuccessModal kind={movementSuccess} />
 
     </>
   );

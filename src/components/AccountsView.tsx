@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useFinance } from "../context/FinanceContext";
-import type { FixedAccount, Movement, VariableAccount, VariableSpend } from "../types";
-import { IconChevronDown, IconEdit, IconPlus, IconTrash, IconX } from "./Icons";
-import { formatBRL, formatShortDate, parseMoney, variableSpendTitleForDate } from "../utils/format";
+import type { FixedAccount, Movement, RecurringAccount, VariableAccount, VariableSpend } from "../types";
+import { IconChevronDown, IconEdit, IconPlus, IconTrash } from "./Icons";
+import {
+  formatBRL,
+  formatShortDate,
+  isInMonth,
+  monthKey,
+  parseMoney,
+  variableSpendTitleForDate,
+} from "../utils/format";
 
-type Seg = "fixed" | "variable";
+type Seg = "fixed" | "variable" | "recurring";
 
 export function AccountsView({ visible = true }: { visible?: boolean }) {
   const {
@@ -19,6 +26,11 @@ export function AccountsView({ visible = true }: { visible?: boolean }) {
     removeVariableAccount,
     addVariableSpend,
     removeVariableSpend,
+    addRecurringAccount,
+    updateRecurringAccount,
+    removeRecurringAccount,
+    addRecurringSpend,
+    removeRecurringSpend,
   } = useFinance();
 
   const [seg, setSeg] = useState<Seg>("fixed");
@@ -32,6 +44,11 @@ export function AccountsView({ visible = true }: { visible?: boolean }) {
   const [vLimit, setVLimit] = useState("");
   const [vNotes, setVNotes] = useState("");
   const [variableFormOpen, setVariableFormOpen] = useState(false);
+
+  const [rName, setRName] = useState("");
+  const [rLimit, setRLimit] = useState("");
+  const [rNotes, setRNotes] = useState("");
+  const [recurringFormOpen, setRecurringFormOpen] = useState(false);
 
   function addFixed(e: FormEvent) {
     e.preventDefault();
@@ -63,9 +80,24 @@ export function AccountsView({ visible = true }: { visible?: boolean }) {
     setVariableFormOpen(false);
   }
 
+  function addRecurring(e: FormEvent) {
+    e.preventDefault();
+    if (!rName.trim()) return;
+    const budgetLimit = rLimit.trim() ? parseMoney(rLimit) : undefined;
+    addRecurringAccount({
+      name: rName.trim(),
+      budgetLimit: budgetLimit && budgetLimit > 0 ? budgetLimit : undefined,
+      notes: rNotes.trim() || undefined,
+    });
+    setRName("");
+    setRLimit("");
+    setRNotes("");
+    setRecurringFormOpen(false);
+  }
+
   return (
     <>
-      <div className="seg">
+      <div className="seg seg--triple">
         <button
           type="button"
           className={seg === "fixed" ? "active" : ""}
@@ -80,10 +112,23 @@ export function AccountsView({ visible = true }: { visible?: boolean }) {
         >
           Variáveis
         </button>
+        <button
+          type="button"
+          className={seg === "recurring" ? "active" : ""}
+          onClick={() => setSeg("recurring")}
+        >
+          Recorrentes
+        </button>
       </div>
 
       {seg === "fixed" && (
         <>
+          <div className="accounts-seg-hint" role="note" aria-label="Sobre contas fixas">
+            <p>
+              Despesas <strong>mensais fixas</strong> com <strong>valor que não muda</strong>.
+            </p>
+          </div>
+
           <div className="card card--collapsible">
             <div className="card-expand-head">
               <h3 id="fx-new-heading" className="card-expand-title">
@@ -170,6 +215,13 @@ export function AccountsView({ visible = true }: { visible?: boolean }) {
 
       {seg === "variable" && (
         <>
+          <div className="accounts-seg-hint" role="note" aria-label="Sobre contas variáveis">
+            <p>
+              Defina o <strong>teto do gasto</strong> (valor máximo). O gasto real pode variar e, em alguns casos,{" "}
+              <strong>ultrapassar o teto</strong>.
+            </p>
+          </div>
+
           <div className="card card--collapsible">
             <div className="card-expand-head">
               <h3 id="var-new-heading" className="card-expand-title">
@@ -248,6 +300,100 @@ export function AccountsView({ visible = true }: { visible?: boolean }) {
                   onRemove={removeVariableAccount}
                   addVariableSpend={addVariableSpend}
                   removeVariableSpend={removeVariableSpend}
+                />
+              ))
+            )}
+          </div>
+        </>
+      )}
+
+      {seg === "recurring" && (
+        <>
+          <div className="accounts-seg-hint" role="note" aria-label="Sobre contas recorrentes">
+            <p>
+              Defina o <strong>teto do gasto</strong> (valor máximo). Use o <strong>+</strong> para lançar cada gasto;
+              no mês os valores <strong>se somam</strong> e podem ultrapassar o teto.
+            </p>
+          </div>
+
+          <div className="card card--collapsible">
+            <div className="card-expand-head">
+              <h3 id="rec-new-heading" className="card-expand-title">
+                Nova conta recorrente
+              </h3>
+              <button
+                type="button"
+                className="card-expand-trigger"
+                aria-expanded={recurringFormOpen}
+                aria-controls="rec-new-form"
+                onClick={() => setRecurringFormOpen((o) => !o)}
+                aria-label={recurringFormOpen ? "Ocultar formulário" : "Expandir formulário"}
+              >
+                <IconChevronDown
+                  className={recurringFormOpen ? "is-open" : undefined}
+                  aria-hidden
+                />
+              </button>
+            </div>
+            <div
+              id="rec-new-form"
+              className="card-expand-body"
+              role="region"
+              aria-labelledby="rec-new-heading"
+              hidden={!recurringFormOpen}
+            >
+              <form onSubmit={addRecurring}>
+                <div className="form-row">
+                  <label htmlFor="rec-name">Nome</label>
+                  <input
+                    id="rec-name"
+                    className="input"
+                    value={rName}
+                    onChange={(e) => setRName(e.target.value)}
+                    placeholder="Mercado, combustível, farmácia…"
+                  />
+                </div>
+                <div className="form-row">
+                  <label htmlFor="rec-limit">Teto mensal (opcional, R$)</label>
+                  <input
+                    id="rec-limit"
+                    className="input"
+                    inputMode="decimal"
+                    value={rLimit}
+                    onChange={(e) => setRLimit(e.target.value)}
+                    placeholder="Deixe vazio se não quiser limite"
+                  />
+                </div>
+                <div className="form-row">
+                  <label htmlFor="rec-notes">Observações</label>
+                  <input
+                    id="rec-notes"
+                    className="input"
+                    value={rNotes}
+                    onChange={(e) => setRNotes(e.target.value)}
+                  />
+                </div>
+                <button type="submit" className="btn btn-primary">
+                  Salvar conta recorrente
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <div className="card">
+            <h3 style={{ margin: "0 0 8px", fontSize: "0.95rem" }}>Contas recorrentes</h3>
+            {state.recurringAccounts.length === 0 ? (
+              <p className="empty">Nenhuma conta recorrente.</p>
+            ) : (
+              state.recurringAccounts.map((a) => (
+                <RecurringRow
+                  key={a.id}
+                  panelActive={visible}
+                  account={a}
+                  onUpdate={updateRecurringAccount}
+                  onRemove={removeRecurringAccount}
+                  addRecurringSpend={addRecurringSpend}
+                  removeRecurringSpend={removeRecurringSpend}
                 />
               ))
             )}
@@ -392,11 +538,21 @@ function VariableRow({
   removeVariableSpend: (accountId: string, spendId: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [spendOpen, setSpendOpen] = useState(false);
+  const [spendFormOpen, setSpendFormOpen] = useState(false);
+  const [spendAmount, setSpendAmount] = useState("");
   const [name, setName] = useState(account.name);
   const [limit, setLimit] = useState(
     account.budgetLimit != null ? String(account.budgetLimit).replace(".", ",") : "",
   );
+
+  const currentMonthKey = monthKey(new Date());
+
+  const currentMonthSpends = useMemo(
+    () => (account.spends ?? []).filter((s) => isInMonth(s.date, currentMonthKey)),
+    [account.spends, currentMonthKey],
+  );
+
+  const hasCurrentMonthSpend = currentMonthSpends.length > 0;
 
   const spendTotal = useMemo(
     () => (account.spends ?? []).reduce((a, s) => a + s.amount, 0),
@@ -410,10 +566,25 @@ function VariableRow({
 
   useEffect(() => {
     if (!panelActive) {
-      setSpendOpen(false);
+      setSpendFormOpen(false);
+      setSpendAmount("");
       setEditing(false);
     }
   }, [panelActive]);
+
+  function submitSpend(e: FormEvent) {
+    e.preventDefault();
+    const v = parseMoney(spendAmount);
+    if (v <= 0) return;
+    const date = new Date().toISOString().slice(0, 10);
+    addVariableSpend(account.id, {
+      title: variableSpendTitleForDate(date),
+      amount: v,
+      date,
+    });
+    setSpendAmount("");
+    setSpendFormOpen(false);
+  }
 
   if (editing) {
     return (
@@ -451,242 +622,304 @@ function VariableRow({
   }
 
   return (
-    <div className="list-item">
-      <div className="list-item-meta">
-        <h4>{account.name}</h4>
-        <small>
-          {account.budgetLimit != null ? (
-            <>
-              Teto: {formatBRL(account.budgetLimit)} · Gasto:{" "}
-              <span className={spendTone}>{formatBRL(spendTotal)}</span>
-            </>
-          ) : (
-            <>
-              Gasto: <span className="var-spend--blue">{formatBRL(spendTotal)}</span>
-            </>
-          )}
-          {account.notes ? ` · ${account.notes}` : ""}
-        </small>
-      </div>
-      <div style={{ textAlign: "right" }}>
-        <span className="badge variable">variável</span>
-        <div className="fixed-row-actions" style={{ marginTop: 8 }}>
-          <button
-            type="button"
-            className="icon-btn icon-btn--plus"
-            onClick={() => setSpendOpen(true)}
-            aria-label="Adicionar gasto"
-            title="Adicionar gasto"
-          >
-            <IconPlus aria-hidden />
-          </button>
-          <button
-            type="button"
-            className="icon-btn icon-btn--ghost"
-            onClick={() => setEditing(true)}
-            aria-label="Editar conta variável"
-            title="Editar"
-          >
-            <IconEdit aria-hidden />
-          </button>
-          <button
-            type="button"
-            className="icon-btn icon-btn--danger"
-            onClick={() => onRemove(account.id)}
-            aria-label="Excluir conta variável"
-            title="Excluir"
-          >
-            <IconTrash aria-hidden />
-          </button>
+    <div className="variable-row">
+      <div className="list-item">
+        <div className="list-item-meta">
+          <h4>{account.name}</h4>
+          <small>
+            {account.budgetLimit != null ? (
+              <>
+                Teto: {formatBRL(account.budgetLimit)} · Gasto:{" "}
+                <span className={spendTone}>{formatBRL(spendTotal)}</span>
+              </>
+            ) : (
+              <>
+                Gasto: <span className="var-spend--blue">{formatBRL(spendTotal)}</span>
+              </>
+            )}
+            {account.notes ? ` · ${account.notes}` : ""}
+          </small>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <span className="badge variable">variável</span>
+          <div className="fixed-row-actions" style={{ marginTop: 8 }}>
+            <label
+              className="inline-checkbox"
+              htmlFor={`var-spend-${account.id}`}
+              title="Registrar gasto real"
+            >
+              <input
+                id={`var-spend-${account.id}`}
+                type="checkbox"
+                checked={spendFormOpen || hasCurrentMonthSpend}
+                onChange={(e) => {
+                  const next = e.target.checked;
+                  if (next) {
+                    setSpendFormOpen(true);
+                    return;
+                  }
+                  setSpendFormOpen(false);
+                  setSpendAmount("");
+                  for (const sp of currentMonthSpends) {
+                    removeVariableSpend(account.id, sp.id);
+                  }
+                }}
+                aria-label="Registrar gasto real"
+              />
+            </label>
+            <button
+              type="button"
+              className="icon-btn icon-btn--ghost"
+              onClick={() => setEditing(true)}
+              aria-label="Editar conta variável"
+              title="Editar"
+            >
+              <IconEdit aria-hidden />
+            </button>
+            <button
+              type="button"
+              className="icon-btn icon-btn--danger"
+              onClick={() => onRemove(account.id)}
+              aria-label="Excluir conta variável"
+              title="Excluir"
+            >
+              <IconTrash aria-hidden />
+            </button>
+          </div>
         </div>
       </div>
-      <VariableSpendModal
-        account={account}
-        open={spendOpen}
-        onClose={() => setSpendOpen(false)}
-        addVariableSpend={addVariableSpend}
-        removeVariableSpend={removeVariableSpend}
-      />
+      {spendFormOpen ? (
+        <form className="variable-spend-inline" onSubmit={submitSpend}>
+          <label className="variable-spend-inline__label" htmlFor={`var-spend-amount-${account.id}`}>
+            Valor real (R$)
+          </label>
+          <input
+            id={`var-spend-amount-${account.id}`}
+            className="input variable-spend-inline__input"
+            inputMode="decimal"
+            value={spendAmount}
+            onChange={(e) => setSpendAmount(e.target.value)}
+            placeholder="0,00"
+            autoFocus
+          />
+          <button type="submit" className="btn btn-primary variable-spend-inline__submit">
+            OK
+          </button>
+        </form>
+      ) : null}
     </div>
   );
 }
 
-function VariableSpendModal({
+function RecurringRow({
+  panelActive,
   account,
-  open,
-  onClose,
-  addVariableSpend,
-  removeVariableSpend,
+  onUpdate,
+  onRemove,
+  addRecurringSpend,
+  removeRecurringSpend,
 }: {
-  account: VariableAccount;
-  open: boolean;
-  onClose: () => void;
-  addVariableSpend: (accountId: string, e: Omit<VariableSpend, "id">) => void;
-  removeVariableSpend: (accountId: string, spendId: string) => void;
+  panelActive: boolean;
+  account: RecurringAccount;
+  onUpdate: (id: string, p: Partial<RecurringAccount>) => void;
+  onRemove: (id: string) => void;
+  addRecurringSpend: (accountId: string, e: Omit<VariableSpend, "id">) => void;
+  removeRecurringSpend: (accountId: string, spendId: string) => void;
 }) {
-  const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [editing, setEditing] = useState(false);
+  const [spendFormOpen, setSpendFormOpen] = useState(false);
+  const [spendAmount, setSpendAmount] = useState("");
+  const [spendDesc, setSpendDesc] = useState("");
+  const [name, setName] = useState(account.name);
+  const [limit, setLimit] = useState(
+    account.budgetLimit != null ? String(account.budgetLimit).replace(".", ",") : "",
+  );
 
-  useEffect(() => {
-    if (open) {
-      setAmount("");
-      setDate(new Date().toISOString().slice(0, 10));
-    }
-  }, [open, account.id]);
+  const currentMonthKey = monthKey(new Date());
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  const spends = useMemo(
+  const monthSpends = useMemo(
     () =>
-      [...(account.spends ?? [])].sort((a, b) =>
-        a.date < b.date ? 1 : a.date > b.date ? -1 : 0,
-      ),
-    [account.spends],
+      [...(account.spends ?? [])]
+        .filter((s) => isInMonth(s.date, currentMonthKey))
+        .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
+    [account.spends, currentMonthKey],
   );
 
-  const total = useMemo(
-    () => spends.reduce((a, s) => a + s.amount, 0),
-    [spends],
+  const monthSpendTotal = useMemo(
+    () => monthSpends.reduce((a, s) => a + s.amount, 0),
+    [monthSpends],
   );
 
-  const overBudget =
-    account.budgetLimit != null && total > account.budgetLimit;
+  const spendTone = useMemo(
+    () => variableSpendToneClass(monthSpendTotal, account.budgetLimit),
+    [monthSpendTotal, account.budgetLimit],
+  );
 
-  function submit(e: FormEvent) {
+  useEffect(() => {
+    if (!panelActive) {
+      setSpendFormOpen(false);
+      setSpendAmount("");
+      setSpendDesc("");
+      setEditing(false);
+    }
+  }, [panelActive]);
+
+  function submitSpend(e: FormEvent) {
     e.preventDefault();
-    const v = parseMoney(amount);
+    const desc = spendDesc.trim();
+    const v = parseMoney(spendAmount);
     if (v <= 0) return;
-    addVariableSpend(account.id, {
-      title: variableSpendTitleForDate(date),
+    const date = new Date().toISOString().slice(0, 10);
+    addRecurringSpend(account.id, {
+      title: desc ? `${account.name} — ${desc}` : account.name,
       amount: v,
       date,
+      notes: desc || undefined,
     });
-    setAmount("");
-    setDate(new Date().toISOString().slice(0, 10));
+    setSpendAmount("");
+    setSpendDesc("");
+    setSpendFormOpen(false);
   }
 
-  if (!open) return null;
-
-  return (
-    <div className="modal-backdrop modal-backdrop--fullscreen" role="presentation">
-      <div
-        className="modal-panel modal-panel--fullscreen"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="var-spend-title"
-        onClick={(ev) => ev.stopPropagation()}
-      >
-        <div className="modal-head modal-head--fullscreen">
-          <div className="modal-head__text">
-            <h2 id="var-spend-title">Gastos · {account.name}</h2>
-            <p>
-              {account.budgetLimit != null
-                ? `Teto ${formatBRL(account.budgetLimit)} · Total ${formatBRL(total)}`
-                : `Total: ${formatBRL(total)}`}
-              {overBudget ? (
-                <span style={{ display: "block", color: "#f87171", marginTop: 6 }}>
-                  Acima do teto em {formatBRL(total - account.budgetLimit!)}.
-                </span>
-              ) : null}
-            </p>
-          </div>
+  if (editing) {
+    return (
+      <div className="list-item">
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+          <input
+            className="input"
+            inputMode="decimal"
+            value={limit}
+            onChange={(e) => setLimit(e.target.value)}
+            placeholder="Teto (opcional)"
+          />
           <button
             type="button"
-            className="modal-close modal-close--fullscreen"
-            onClick={onClose}
-            aria-label="Fechar"
+            className="btn btn-primary"
+            onClick={() => {
+              if (!name.trim()) return;
+              const lim = limit.trim() ? parseMoney(limit) : undefined;
+              onUpdate(account.id, {
+                name: name.trim(),
+                budgetLimit: lim && lim > 0 ? lim : undefined,
+              });
+              setEditing(false);
+            }}
           >
-            <IconX aria-hidden />
+            OK
+          </button>
+          <button type="button" className="btn btn-ghost" onClick={() => setEditing(false)}>
+            Cancelar
           </button>
         </div>
-        <div className="modal-body">
-          <div className="modal-form-block">
-            <p className="modal-section-title">Novo gasto</p>
-            <form
-              onSubmit={submit}
-              className="card"
-              style={{
-                marginBottom: 0,
-                background: "rgba(3, 7, 18, 0.55)",
-                padding: 14,
-              }}
-            >
-              <div className="form-row">
-                <label htmlFor={`vs-amount-${account.id}`}>Valor (R$)</label>
-                <input
-                  id={`vs-amount-${account.id}`}
-                  className="input"
-                  inputMode="decimal"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0,00"
-                />
-              </div>
-              <div className="form-row">
-                <label htmlFor={`vs-date-${account.id}`}>Data</label>
-                <input
-                  id={`vs-date-${account.id}`}
-                  className="input"
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                />
-              </div>
-              <button type="submit" className="btn btn-primary">
-                Adicionar gasto
-              </button>
-            </form>
-          </div>
+      </div>
+    );
+  }
 
-          <div
-            className="modal-list-scroll"
-            role="region"
-            aria-label={`Gastos salvos, ${spends.length} itens`}
-          >
-            <p className="modal-section-title" style={{ marginTop: 0 }}>
-              Gastos salvos ({spends.length})
-            </p>
-            {spends.length === 0 ? (
-              <p className="empty" style={{ padding: "12px 0 8px" }}>
-                Nenhum gasto nesta conta ainda.
-              </p>
+  return (
+    <div className="variable-row">
+      <div className="list-item">
+        <div className="list-item-meta">
+          <h4>{account.name}</h4>
+          <small>
+            {account.budgetLimit != null ? (
+              <>
+                Teto: {formatBRL(account.budgetLimit)} · No mês:{" "}
+                <span className={spendTone}>{formatBRL(monthSpendTotal)}</span>
+              </>
             ) : (
-              <ul className="modal-list">
-                {spends.map((s) => (
-                  <li key={s.id}>
-                    <div className="meta">
-                      <strong>{s.title}</strong>
-                      <small>
-                        {formatShortDate(s.date)}
-                        {s.notes ? ` · ${s.notes}` : ""}
-                      </small>
-                    </div>
-                    <span className="amount expense" style={{ flexShrink: 0 }}>
-                      {formatBRL(s.amount)}
-                    </span>
-                    <button
-                      type="button"
-                      className="icon-btn icon-btn--danger"
-                      onClick={() => removeVariableSpend(account.id, s.id)}
-                      aria-label="Excluir gasto"
-                      title="Excluir"
-                    >
-                      <IconTrash aria-hidden />
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <>
+                No mês: <span className="var-spend--blue">{formatBRL(monthSpendTotal)}</span>
+              </>
             )}
+            {account.notes ? ` · ${account.notes}` : ""}
+          </small>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <span className="badge variable">recorrente</span>
+          <div className="fixed-row-actions" style={{ marginTop: 8 }}>
+            <button
+              type="button"
+              className="icon-btn icon-btn--plus"
+              onClick={() => setSpendFormOpen((o) => !o)}
+              aria-label="Adicionar gasto"
+              aria-expanded={spendFormOpen}
+              title="Adicionar gasto"
+            >
+              <IconPlus aria-hidden />
+            </button>
+            <button
+              type="button"
+              className="icon-btn icon-btn--ghost"
+              onClick={() => setEditing(true)}
+              aria-label="Editar conta recorrente"
+              title="Editar"
+            >
+              <IconEdit aria-hidden />
+            </button>
+            <button
+              type="button"
+              className="icon-btn icon-btn--danger"
+              onClick={() => onRemove(account.id)}
+              aria-label="Excluir conta recorrente"
+              title="Excluir"
+            >
+              <IconTrash aria-hidden />
+            </button>
           </div>
         </div>
       </div>
+      {spendFormOpen ? (
+        <form className="variable-spend-inline" onSubmit={submitSpend}>
+          <label className="variable-spend-inline__label" htmlFor={`rec-spend-amount-${account.id}`}>
+            Valor do gasto (R$)
+          </label>
+          <input
+            id={`rec-spend-amount-${account.id}`}
+            className="input variable-spend-inline__input"
+            inputMode="decimal"
+            value={spendAmount}
+            onChange={(e) => setSpendAmount(e.target.value)}
+            placeholder="0,00"
+            autoFocus
+          />
+          <label className="variable-spend-inline__label" htmlFor={`rec-spend-desc-${account.id}`}>
+            Descrição <span className="agenda-label__hint">(opcional)</span>
+          </label>
+          <input
+            id={`rec-spend-desc-${account.id}`}
+            className="input variable-spend-inline__input variable-spend-inline__input--full"
+            value={spendDesc}
+            onChange={(e) => setSpendDesc(e.target.value)}
+            placeholder="Ex.: compra do fim de semana, abastecimento…"
+          />
+          <button type="submit" className="btn btn-primary variable-spend-inline__submit">
+            OK
+          </button>
+        </form>
+      ) : null}
+      {monthSpends.length > 0 ? (
+        <ul className="recurring-spend-list">
+          {monthSpends.map((s) => (
+            <li key={s.id} className="recurring-spend-list__item">
+              <span className="recurring-spend-list__meta">
+                {s.notes ? <strong>{s.notes}</strong> : null}
+                <small>{formatShortDate(s.date)}</small>
+              </span>
+              <span className="amount expense">{formatBRL(s.amount)}</span>
+              <button
+                type="button"
+                className="icon-btn icon-btn--danger"
+                onClick={() => removeRecurringSpend(account.id, s.id)}
+                aria-label="Excluir gasto"
+                title="Excluir"
+              >
+                <IconTrash aria-hidden />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

@@ -26,6 +26,8 @@ import type {
   FuelEntry,
   FutureIncomeEntry,
   Movement,
+  PatrimonyAsset,
+  RecurringAccount,
   SupermarketEntry,
   VariableAccount,
   VariableSpend,
@@ -74,6 +76,14 @@ type FinanceContextValue = {
     entry: Omit<VariableSpend, "id" | "linkedMovementId">,
   ) => void;
   removeVariableSpend: (accountId: string, spendId: string) => void;
+  addRecurringAccount: (a: Omit<RecurringAccount, "id">) => void;
+  updateRecurringAccount: (id: string, patch: Partial<RecurringAccount>) => void;
+  removeRecurringAccount: (id: string) => void;
+  addRecurringSpend: (
+    accountId: string,
+    entry: Omit<VariableSpend, "id" | "linkedMovementId">,
+  ) => void;
+  removeRecurringSpend: (accountId: string, spendId: string) => void;
   addSupermarket: (e: Omit<SupermarketEntry, "id">) => void;
   removeSupermarket: (id: string) => void;
   addFuel: (e: Omit<FuelEntry, "id" | "total"> & { total?: number }) => void;
@@ -91,6 +101,9 @@ type FinanceContextValue = {
   markFutureIncomeReceived: (id: string) => void;
   markFutureIncomePending: (id: string) => void;
   removeFutureIncome: (id: string) => void;
+  addPatrimonyAsset: (a: Omit<PatrimonyAsset, "id">) => void;
+  updatePatrimonyAsset: (id: string, patch: Partial<PatrimonyAsset>) => void;
+  removePatrimonyAsset: (id: string) => void;
   /** Força leitura do `payload` no servidor (complementa o listener; útil nas abas Contas / Entradas futuras). */
   refreshFinanceFromCloud: () => void;
 };
@@ -687,6 +700,112 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const addRecurringAccount = useCallback((a: Omit<RecurringAccount, "id">) => {
+    const { spends: _s, ...rest } = a;
+    const id = newId();
+    touchLocalEntity(id);
+    setState((s) => ({
+      ...s,
+      recurringAccounts: [...s.recurringAccounts, { ...rest, id, spends: [] }],
+    }));
+  }, []);
+
+  const updateRecurringAccount = useCallback(
+    (id: string, patch: Partial<RecurringAccount>) => {
+      setState((s) => ({
+        ...s,
+        recurringAccounts: s.recurringAccounts.map((x) =>
+          x.id === id ? { ...x, ...patch } : x,
+        ),
+      }));
+    },
+    [],
+  );
+
+  const removeRecurringAccount = useCallback((id: string) => {
+    setState((s) => {
+      const acc = s.recurringAccounts.find((x) => x.id === id);
+      for (const sp of acc?.spends ?? []) {
+        forgetLocalEntity(sp.id);
+        const movementId = resolveVariableSpendMovementId(s.movements, sp);
+        if (movementId) forgetLocalEntity(movementId);
+      }
+      forgetLocalEntity(id);
+      const movementIds = new Set<string>();
+      for (const sp of acc?.spends ?? []) {
+        const mid = resolveVariableSpendMovementId(s.movements, sp);
+        if (mid) movementIds.add(mid);
+      }
+      return {
+        ...s,
+        movements: s.movements.filter((m) => !movementIds.has(m.id)),
+        recurringAccounts: s.recurringAccounts.filter((x) => x.id !== id),
+      };
+    });
+  }, []);
+
+  const addRecurringSpend = useCallback(
+    (accountId: string, entry: Omit<VariableSpend, "id" | "linkedMovementId">) => {
+      const movementId = newId();
+      const spendId = newId();
+      touchLocalEntity(movementId);
+      touchLocalEntity(spendId);
+      setState((s) => {
+        const movement: Movement = {
+          id: movementId,
+          kind: "expense",
+          amount: entry.amount,
+          title: entry.title,
+          date: entry.date,
+          nature: "variable",
+        };
+        return {
+          ...s,
+          movements: [movement, ...s.movements],
+          recurringAccounts: s.recurringAccounts.map((x) =>
+            x.id === accountId
+              ? {
+                  ...x,
+                  spends: [
+                    { ...entry, id: spendId, linkedMovementId: movementId },
+                    ...(x.spends ?? []),
+                  ],
+                }
+              : x,
+          ),
+        };
+      });
+    },
+    [],
+  );
+
+  const removeRecurringSpend = useCallback(
+    (accountId: string, spendId: string) => {
+      setState((s) => {
+        const account = s.recurringAccounts.find((x) => x.id === accountId);
+        const spend = account?.spends?.find((sp) => sp.id === spendId);
+        const movementId = spend ? resolveVariableSpendMovementId(s.movements, spend) : null;
+        forgetLocalEntity(spendId);
+        if (movementId) forgetLocalEntity(movementId);
+        return {
+          ...s,
+          movements: movementId
+            ? s.movements.filter((m) => m.id !== movementId)
+            : s.movements,
+          recurringAccounts: s.recurringAccounts.map((x) =>
+            x.id === accountId
+              ? {
+                  ...x,
+                  spends: (x.spends ?? []).filter((sp) => sp.id !== spendId),
+                }
+              : x,
+          ),
+        };
+      });
+    },
+    [],
+  );
+
   const addSupermarket = useCallback((e: Omit<SupermarketEntry, "id">) => {
     const id = newId();
     touchLocalEntity(id);
@@ -745,6 +864,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       supermarket: s.supermarket.filter((e) => !isInMonth(e.date, ym)),
       fuel: s.fuel.filter((f) => !isInMonth(f.date, ym)),
       variableAccounts: s.variableAccounts.map((acc) => ({
+        ...acc,
+        spends: (acc.spends ?? []).filter((sp) => !isInMonth(sp.date, ym)),
+      })),
+      recurringAccounts: s.recurringAccounts.map((acc) => ({
         ...acc,
         spends: (acc.spends ?? []).filter((sp) => !isInMonth(sp.date, ym)),
       })),
@@ -838,6 +961,30 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const addPatrimonyAsset = useCallback((a: Omit<PatrimonyAsset, "id">) => {
+    const id = newId();
+    touchLocalEntity(id);
+    setState((s) => ({
+      ...s,
+      patrimonyAssets: [{ ...a, id }, ...s.patrimonyAssets],
+    }));
+  }, []);
+
+  const updatePatrimonyAsset = useCallback((id: string, patch: Partial<PatrimonyAsset>) => {
+    setState((s) => ({
+      ...s,
+      patrimonyAssets: s.patrimonyAssets.map((x) => (x.id === id ? { ...x, ...patch } : x)),
+    }));
+  }, []);
+
+  const removePatrimonyAsset = useCallback((id: string) => {
+    forgetLocalEntity(id);
+    setState((s) => ({
+      ...s,
+      patrimonyAssets: s.patrimonyAssets.filter((x) => x.id !== id),
+    }));
+  }, []);
+
   const bootstrapNewMonth = useCallback((ym: string) => {
     if (!/^\d{4}-\d{2}$/.test(ym)) return;
     setState((s) => {
@@ -919,6 +1066,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       removeVariableAccount,
       addVariableSpend,
       removeVariableSpend,
+      addRecurringAccount,
+      updateRecurringAccount,
+      removeRecurringAccount,
+      addRecurringSpend,
+      removeRecurringSpend,
       addSupermarket,
       removeSupermarket,
       addFuel,
@@ -930,6 +1082,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       markFutureIncomeReceived,
       markFutureIncomePending,
       removeFutureIncome,
+      addPatrimonyAsset,
+      updatePatrimonyAsset,
+      removePatrimonyAsset,
       refreshFinanceFromCloud,
     }),
     [
@@ -944,6 +1099,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       removeVariableAccount,
       addVariableSpend,
       removeVariableSpend,
+      addRecurringAccount,
+      updateRecurringAccount,
+      removeRecurringAccount,
+      addRecurringSpend,
+      removeRecurringSpend,
       addSupermarket,
       removeSupermarket,
       addFuel,
@@ -955,6 +1115,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       markFutureIncomeReceived,
       markFutureIncomePending,
       removeFutureIncome,
+      addPatrimonyAsset,
+      updatePatrimonyAsset,
+      removePatrimonyAsset,
       refreshFinanceFromCloud,
     ],
   );

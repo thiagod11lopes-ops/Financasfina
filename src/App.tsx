@@ -1,21 +1,26 @@
 import { useEffect, useState } from "react";
-import { BottomNav, type TabId } from "./components/BottomNav";
+import { BottomNav, type BottomTabId, type TabId } from "./components/BottomNav";
+import { AppTopBar } from "./components/AppTopBar";
 import { Dashboard } from "./components/Dashboard";
 import { MovementsView } from "./components/MovementsView";
 import { AccountsView } from "./components/AccountsView";
 import { FutureIncomesView } from "./components/FutureIncomesView";
+import { PatrimonyView } from "./components/PatrimonyView";
 import { SettingsView } from "./components/SettingsView";
-import { SupermarketView } from "./components/SupermarketView";
-import { PageBranding } from "./components/PageBranding";
 import { CloudSyncBadge } from "./components/CloudSyncBadge";
 import { useFinance } from "./context/FinanceContext";
+
+function toBottomTab(tab: TabId): BottomTabId | null {
+  if (tab === "settings") return null;
+  return tab;
+}
 
 export default function App() {
   const [tab, setTab] = useState<TabId>("home");
   const { refreshFinanceFromCloud } = useFinance();
 
   useEffect(() => {
-    if (tab !== "accounts" && tab !== "futureIncome" && tab !== "shoppingList") return;
+    if (tab !== "accounts" && tab !== "futureIncome" && tab !== "patrimony") return;
     refreshFinanceFromCloud();
   }, [tab, refreshFinanceFromCloud]);
 
@@ -23,7 +28,7 @@ export default function App() {
     <>
       <CloudSyncBadge />
       <main className="app-shell">
-        <PageBranding />
+        <AppTopBar activeTab={tab} onNavigate={setTab} />
         {/*
           Manter todas as vistas montadas: o contexto financeiro e o Firestore atualizam todas
           ao mesmo tempo; evita perda de rascunhos e estados ao mudar de aba na navegação inferior.
@@ -40,14 +45,14 @@ export default function App() {
         <section className="app-tab-panel" hidden={tab !== "futureIncome"} aria-label="Entradas futuras">
           <FutureIncomesView />
         </section>
-        <section className="app-tab-panel" hidden={tab !== "shoppingList"} aria-label="Lista de compras">
-          <SupermarketView />
+        <section className="app-tab-panel" hidden={tab !== "patrimony"} aria-label="Patrimônio">
+          <PatrimonyView />
         </section>
         <section className="app-tab-panel" hidden={tab !== "settings"} aria-label="Ajustes">
           <SettingsView visible={tab === "settings"} />
         </section>
       </main>
-      <BottomNav active={tab} onChange={setTab} />
+      <BottomNav active={toBottomTab(tab)} onChange={setTab} />
     </>
   );
 }

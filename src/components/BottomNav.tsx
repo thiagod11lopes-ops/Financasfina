@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
-import { IconCart, IconFlow, IconFutureIncome, IconHome, IconSettings, IconWallet } from "./Icons";
+import { IconFlow, IconFutureIncome, IconHome, IconPatrimony, IconWallet } from "./Icons";
 
-export type TabId = "home" | "flow" | "accounts" | "futureIncome" | "shoppingList" | "settings";
+export type BottomTabId = "home" | "flow" | "accounts" | "futureIncome" | "patrimony";
+export type TabId = BottomTabId | "settings";
 
-const tabs: { id: TabId; label: ReactNode; Icon: typeof IconHome }[] = [
+const tabs: { id: BottomTabId; label: ReactNode; Icon: typeof IconHome }[] = [
   { id: "home", label: "Início", Icon: IconHome },
   { id: "flow", label: "Fluxo", Icon: IconFlow },
   { id: "accounts", label: "Contas", Icon: IconWallet },
@@ -18,26 +19,15 @@ const tabs: { id: TabId; label: ReactNode; Icon: typeof IconHome }[] = [
     ),
     Icon: IconFutureIncome,
   },
-  {
-    id: "shoppingList",
-    label: (
-      <>
-        Lista de
-        <br />
-        compras
-      </>
-    ),
-    Icon: IconCart,
-  },
-  { id: "settings", label: "Ajustes", Icon: IconSettings },
+  { id: "patrimony", label: "Patrimônio", Icon: IconPatrimony },
 ];
 
 export function BottomNav({
   active,
   onChange,
 }: {
-  active: TabId;
-  onChange: (t: TabId) => void;
+  active: BottomTabId | null;
+  onChange: (t: BottomTabId) => void;
 }) {
   return (
     <nav className="bottom-nav" aria-label="Navegação principal">
@@ -49,9 +39,7 @@ export function BottomNav({
             className={active === id ? "active" : ""}
             onClick={() => onChange(id)}
             aria-current={active === id ? "page" : undefined}
-            title={
-              id === "futureIncome" ? "Entradas Futuras" : id === "shoppingList" ? "Lista de compras" : undefined
-            }
+            title={id === "futureIncome" ? "Entradas Futuras" : undefined}
           >
             <Icon aria-hidden />
             {label}

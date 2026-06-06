@@ -43,6 +43,15 @@ export type VariableAccount = {
   spends?: VariableSpend[];
 };
 
+/** Conta variável com vários lançamentos no mês (mercado, combustível, farmácia…). */
+export type RecurringAccount = {
+  id: string;
+  name: string;
+  budgetLimit?: number;
+  notes?: string;
+  spends?: VariableSpend[];
+};
+
 export type SupermarketEntry = {
   id: string;
   amount: number;
@@ -62,6 +71,14 @@ export type FuelEntry = {
 };
 
 /** Entrada prevista; ao marcar recebido, vira lançamento de renda no fluxo. */
+/** Saldo fora do fluxo do sistema (poupança, cofrinho, investimento…). */
+export type PatrimonyAsset = {
+  id: string;
+  name: string;
+  value: number;
+  notes?: string;
+};
+
 export type FutureIncomeEntry = {
   id: string;
   amount: number;
@@ -80,7 +97,9 @@ export type AppState = {
   movements: Movement[];
   fixedAccounts: FixedAccount[];
   variableAccounts: VariableAccount[];
+  recurringAccounts: RecurringAccount[];
   supermarket: SupermarketEntry[];
   fuel: FuelEntry[];
   futureIncomes: FutureIncomeEntry[];
+  patrimonyAssets: PatrimonyAsset[];
 };

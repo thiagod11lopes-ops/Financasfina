@@ -86,6 +86,16 @@ Abre o site → **Ver código-fonte da página** (View Page Source). Se aparecer
 
 **Nota:** **Agenda**, **utilizadores/cores** e **abas do resumo** continuam só no `localStorage` deste aparelho.
 
+### Lista de Compras (app externa)
+
+O ícone do carrinho abre [Lista de Compras](https://thiagod11lopes-ops.github.io/Lista-de-Compras/). Com **sessão Google** ativa, o Finanças liga automaticamente a lista à sua conta (sala na nuvem = hash do e-mail + `uid` no mesmo Firestore).
+
+Requisitos:
+
+1. O repositório **Lista-de-Compras** deve usar as **mesmas** variáveis `VITE_FIREBASE_*` (mesmo projeto Firebase).
+2. Publique no Firebase as regras deste repositório (`firestore.rules` inclui `userFinances` e `listaComprasSync_v1`).
+3. No GitHub, configure os **Secrets** `VITE_FIREBASE_*` também no repositório Lista-de-Compras (pode reutilizar o script `upload-github-firebase-secrets.ps1` nessa pasta).
+
 **GitHub Pages:** o workflow `pages.yml` já passa `VITE_FIREBASE_*` a partir dos **Secrets** do repositório. Para os preencher a partir do teu `.env` (com `gh` autenticado):
 
 ```powershell

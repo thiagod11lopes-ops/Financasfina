@@ -100,13 +100,15 @@ export function sumPendingFutureIncomesForMonth(state: AppState, ym: string): nu
   return sum;
 }
 
-/** Soma de todos os tetos (`budgetLimit`) definidos nas contas variáveis. */
+/** Soma de todos os tetos (`budgetLimit`) nas contas variáveis e recorrentes. */
 export function sumVariableBudgetLimitsTotal(state: AppState): number {
-  return state.variableAccounts.reduce((acc, v) => {
-    const lim = v.budgetLimit;
-    if (lim == null || lim <= 0) return acc;
-    return acc + lim;
-  }, 0);
+  const sum = (accounts: { budgetLimit?: number }[]) =>
+    accounts.reduce((acc, v) => {
+      const lim = v.budgetLimit;
+      if (lim == null || lim <= 0) return acc;
+      return acc + lim;
+    }, 0);
+  return sum(state.variableAccounts) + sum(state.recurringAccounts);
 }
 
 /** Soma do teto ainda pendente no mês (teto - gastos variáveis já lançados no fluxo). */
@@ -134,7 +136,7 @@ export function sumVariableBudgetPendingForMonth(state: AppState, ym: string): n
 export function sumVariableExpenseMovementsForMonth(state: AppState, ym: string): number {
   if (!/^\d{4}-\d{2}$/.test(ym)) return 0;
   const movementIdsFromVariableSpends = new Set<string>();
-  for (const acc of state.variableAccounts) {
+  for (const acc of [...state.variableAccounts, ...state.recurringAccounts]) {
     for (const sp of acc.spends ?? []) {
       if (!isInMonth(sp.date, ym)) continue;
       const mid = sp.linkedMovementId;
@@ -152,13 +154,7 @@ export function sumVariableExpenseMovementsForMonth(state: AppState, ym: string)
   return sum;
 }
 
-/**
- * Projeção de saldo no mês:
- * - O **saldo / saídas totais** do painel continuam a incluir todos os lançamentos do fluxo (incl. variáveis).
- * - Aqui **remove-se** do ponto de partida o efeito dos gastos variáveis no fluxo e **subtraem-se só os tetos**,
- *   para não contar variável duas vezes (real no fluxo + teto na projeção).
- */
-export function computeProjectedMonthBalance(state: AppState, ym: string): number {
+function projectedMonthBalanceShared(state: AppState, ym: string) {
   const balance = computeMonthDashboardBalance(state, ym);
   const variableExpenseInFlow = sumVariableExpenseMovementsForMonth(state, ym);
   const balanceWithoutVariableFlow = balance + variableExpenseInFlow;
@@ -167,8 +163,16 @@ export function computeProjectedMonthBalance(state: AppState, ym: string): numbe
     if (x.inFlow) return a;
     return a + x.monthlyAmount;
   }, 0);
-  const variableBudgetTotal = sumVariableBudgetLimitsTotal(state);
-  return balanceWithoutVariableFlow + pendingFuture - fixedPlannedPending - variableBudgetTotal;
+  return balanceWithoutVariableFlow + pendingFuture - fixedPlannedPending;
+}
+
+/**
+ * Projeção planeada: reserva **100% dos tetos** das contas variáveis.
+ * - O saldo do painel inclui todos os lançamentos do fluxo; aqui devolve-se o efeito dos variáveis no fluxo
+ *   e subtraem-se os tetos, para não contar variável duas vezes.
+ */
+export function computeProjectedMonthBalance(state: AppState, ym: string): number {
+  return projectedMonthBalanceShared(state, ym) - sumVariableBudgetLimitsTotal(state);
 }
 
 /** Saldo do painel (entradas − fluxo − mercado − combustível), igual ao card Início. */
@@ -211,6 +215,11 @@ export function countMonthEntries(state: AppState, ym: string): number {
     if (isInMonth(f.date, ym)) n++;
   }
   for (const a of state.variableAccounts) {
+    for (const sp of a.spends ?? []) {
+      if (isInMonth(sp.date, ym)) n++;
+    }
+  }
+  for (const a of state.recurringAccounts) {
     for (const sp of a.spends ?? []) {
       if (isInMonth(sp.date, ym)) n++;
     }

@@ -43,6 +43,18 @@ export function IconFuel(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+/** Patrimônio (bens e investimentos). */
+export function IconPatrimony(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M3 21h18" />
+      <path d="M5 21V9l7-4 7 4v12" />
+      <path d="M9 21v-6h6v6" />
+      <path d="M9 10h6" />
+    </svg>
+  );
+}
+
 /** Entradas futuras (valores a receber). */
 export function IconFutureIncome(props: SVGProps<SVGSVGElement>) {
   return (

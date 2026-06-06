@@ -19,8 +19,13 @@ export function pruneBirthRefForIdsAckedInRemote(birth: Map<string, number>, rem
     seen.add(a.id);
     for (const s of a.spends ?? []) seen.add(s.id);
   }
+  for (const a of remote.recurringAccounts) {
+    seen.add(a.id);
+    for (const s of a.spends ?? []) seen.add(s.id);
+  }
   for (const e of remote.supermarket) seen.add(e.id);
   for (const e of remote.fuel) seen.add(e.id);
+  for (const a of remote.patrimonyAssets) seen.add(a.id);
   for (const id of [...birth.keys()]) {
     if (seen.has(id)) birth.delete(id);
   }
@@ -35,8 +40,13 @@ function collectAllIds(s: AppState): Set<string> {
     out.add(a.id);
     for (const sp of a.spends ?? []) out.add(sp.id);
   }
+  for (const a of s.recurringAccounts) {
+    out.add(a.id);
+    for (const sp of a.spends ?? []) out.add(sp.id);
+  }
   for (const e of s.supermarket) out.add(e.id);
   for (const e of s.fuel) out.add(e.id);
+  for (const a of s.patrimonyAssets) out.add(a.id);
   return out;
 }
 
@@ -91,6 +101,21 @@ export function mergeRemotePreservingPendingUploads(
   });
   const variableAccounts = [...mergedAccounts, ...extraAcc];
 
+  const rra = new Set(remote.recurringAccounts.map((a) => a.id));
+  const extraRec = local.recurringAccounts.filter(
+    (a) => !rra.has(a.id) && isRecentBirth(a.id, birth, now),
+  );
+  const mergedRecurring = remote.recurringAccounts.map((r) => {
+    const l = local.recurringAccounts.find((x) => x.id === r.id);
+    if (!l) return r;
+    const rs = new Set((r.spends ?? []).map((s) => s.id));
+    const extraSp = (l.spends ?? []).filter(
+      (s) => !rs.has(s.id) && isRecentBirth(s.id, birth, now),
+    );
+    return { ...r, spends: [...(r.spends ?? []), ...extraSp] };
+  });
+  const recurringAccounts = [...mergedRecurring, ...extraRec];
+
   const rs = new Set(remote.supermarket.map((e) => e.id));
   const extraS = local.supermarket.filter(
     (e) => !rs.has(e.id) && isRecentBirth(e.id, birth, now),
@@ -101,12 +126,20 @@ export function mergeRemotePreservingPendingUploads(
   const extraF = local.fuel.filter((e) => !rf.has(e.id) && isRecentBirth(e.id, birth, now));
   const fuel = [...remote.fuel, ...extraF];
 
+  const rpa = new Set(remote.patrimonyAssets.map((a) => a.id));
+  const extraPa = local.patrimonyAssets.filter(
+    (a) => !rpa.has(a.id) && isRecentBirth(a.id, birth, now),
+  );
+  const patrimonyAssets = [...remote.patrimonyAssets, ...extraPa];
+
   return {
     movements,
     fixedAccounts,
     variableAccounts,
+    recurringAccounts,
     supermarket,
     fuel,
     futureIncomes,
+    patrimonyAssets,
   };
 }
