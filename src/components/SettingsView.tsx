@@ -10,6 +10,8 @@ import { useAuth } from "../firebase/AuthProvider";
 import { useUserDocCloud } from "../firebase/userDocCloud";
 import { countMonthEntries, emailDisplayLabel, formatMonthLabelPt, monthKey } from "../utils/format";
 import { MonthYearPickerModal } from "./MonthYearPickerModal";
+import { PwaSafariLoginLink } from "./PwaSafariLoginLink";
+import { requiresBrowserForGoogleLogin } from "../utils/pwa";
 import {
   USERS_ALL_OPTION,
   USERS_SYNC_EVENT,
@@ -144,9 +146,17 @@ export function SettingsView({ visible = true }: { visible?: boolean }) {
               Entre com a mesma conta Google em vários dispositivos para sincronizar finanças, abas do resumo, agenda
               familiar e lista de utilizadores responsáveis (última alteração na nuvem prevalece).
             </p>
-            <button type="button" className="settings-btn settings-btn--primary" onClick={() => void signInWithGoogle()}>
-              Entrar com Google
-            </button>
+            {requiresBrowserForGoogleLogin() ? (
+              <PwaSafariLoginLink />
+            ) : (
+              <button
+                type="button"
+                className="settings-btn settings-btn--primary"
+                onClick={() => void signInWithGoogle()}
+              >
+                Entrar com Google
+              </button>
+            )}
           </div>
         )}
         {lastError ? <p className="settings-firebase-error">{lastError}</p> : null}

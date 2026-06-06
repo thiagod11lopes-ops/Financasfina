@@ -5,8 +5,11 @@ import {
   isGoogleRedirectPending,
   markGoogleRedirectPending,
 } from "../firebase/loginRedirectState";
+import { PwaSafariLoginLink } from "./PwaSafariLoginLink";
+import { requiresBrowserForGoogleLogin } from "../utils/pwa";
 
 const DISMISS_KEY = "financas-login-prompt-dismissed";
+const REDIRECT_TIMEOUT_MS = 8_000;
 
 export function useGoogleLoginPrompt(): {
   open: boolean;
@@ -61,6 +64,8 @@ export function GoogleLoginPromptModal({
 }) {
   const { signInWithGoogle, lastError } = useAuth();
   const [busy, setBusy] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const pwaNeedsSafari = requiresBrowserForGoogleLogin();
 
   useEffect(() => {
     if (!open) return;
@@ -71,9 +76,30 @@ export function GoogleLoginPromptModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onDismiss]);
 
+  useEffect(() => {
+    if (!busy) return;
+    const id = window.setTimeout(() => {
+      setBusy(false);
+      clearGoogleRedirectPending();
+      setLocalError(
+        "O redirect para a Google não abriu. Se abriu pelo ícone do telemóvel, use «Abrir no Safari». Caso contrário, tente de novo.",
+      );
+    }, REDIRECT_TIMEOUT_MS);
+    return () => window.clearTimeout(id);
+  }, [busy]);
+
+  useEffect(() => {
+    if (!open) {
+      setBusy(false);
+      setLocalError(null);
+    }
+  }, [open]);
+
   if (!open) return null;
 
   async function handleSignIn() {
+    if (pwaNeedsSafari) return;
+    setLocalError(null);
     setBusy(true);
     markGoogleRedirectPending();
     try {
@@ -83,6 +109,8 @@ export function GoogleLoginPromptModal({
       setBusy(false);
     }
   }
+
+  const errorText = localError ?? lastError;
 
   return (
     <div className="modal-backdrop login-prompt-backdrop" role="presentation">
@@ -99,8 +127,10 @@ export function GoogleLoginPromptModal({
             <h2 id="login-prompt-title">Entre com Google</h2>
             <p id="login-prompt-desc" className="login-prompt-modal__lead">
               Para guardar os seus dados na nuvem e aceder-lhes em qualquer aparelho, inicie sessão
-              com a sua conta Google. No iPhone (Safari), o browser abre a página da Google e volta ao
-              app — isso é normal.
+              com a sua conta Google.
+              {pwaNeedsSafari
+                ? " Abriu pelo ícone no ecrã inicial? Use o botão abaixo para entrar no Safari."
+                : " No telemóvel, o browser abre a página da Google e volta ao app — isso é normal."}
             </p>
           </div>
         </div>
@@ -114,20 +144,24 @@ export function GoogleLoginPromptModal({
             </p>
           </div>
 
-          {lastError ? <p className="login-prompt-modal__error">{lastError}</p> : null}
+          {errorText ? <p className="login-prompt-modal__error">{errorText}</p> : null}
 
-          <button
-            type="button"
-            className="settings-btn settings-btn--primary"
-            disabled={busy}
-            onClick={() => void handleSignIn()}
-          >
-            {busy ? "A redirecionar para Google…" : "Entrar com Google"}
-          </button>
+          {pwaNeedsSafari ? (
+            <PwaSafariLoginLink />
+          ) : (
+            <button
+              type="button"
+              className="settings-btn settings-btn--primary"
+              disabled={busy}
+              onClick={() => void handleSignIn()}
+            >
+              {busy ? "A redirecionar para Google…" : "Entrar com Google"}
+            </button>
+          )}
           <button
             type="button"
             className="settings-btn settings-btn--outline"
-            disabled={busy}
+            disabled={busy && !pwaNeedsSafari}
             onClick={onDismiss}
           >
             Continuar sem entrar

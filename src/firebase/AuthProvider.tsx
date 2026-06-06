@@ -18,6 +18,7 @@ import {
 import { getFirebaseAuth, resolveGoogleRedirectOnce } from "./auth";
 import { isFirebaseConfigured } from "./config";
 import { clearGoogleRedirectPending, isGoogleRedirectPending } from "./loginRedirectState";
+import { PWA_IOS_LOGIN_MESSAGE, requiresBrowserForGoogleLogin } from "../utils/pwa";
 
 const AUTH_INIT_TIMEOUT_MS = 12_000;
 
@@ -179,6 +180,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithGoogle = useCallback(async () => {
     setLastError(null);
     if (!configured) return;
+    if (requiresBrowserForGoogleLogin()) {
+      setLastError(PWA_IOS_LOGIN_MESSAGE);
+      clearGoogleRedirectPending();
+      return;
+    }
     const auth = getFirebaseAuth();
     if (!auth) return;
     try {
@@ -187,7 +193,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         provider.setCustomParameters({ prompt: "select_account" });
       }
       if (shouldUseGoogleRedirect()) {
-        await signInWithRedirect(auth, provider);
+        /* Não await: no PWA o redirect navega a página; await pendurado trava o botão. */
+        void signInWithRedirect(auth, provider);
         return;
       }
       try {
@@ -199,7 +206,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             ? String((popupErr as { code: string }).code)
             : "";
         if (isPopupAuthError(code)) {
-          await signInWithRedirect(auth, provider);
+          void signInWithRedirect(auth, provider);
           return;
         }
         clearGoogleRedirectPending();
