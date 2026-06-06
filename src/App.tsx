@@ -8,6 +8,10 @@ import { FutureIncomesView } from "./components/FutureIncomesView";
 import { PatrimonyView } from "./components/PatrimonyView";
 import { SettingsView } from "./components/SettingsView";
 import { CloudSyncBadge } from "./components/CloudSyncBadge";
+import {
+  GoogleLoginPromptModal,
+  useGoogleLoginPrompt,
+} from "./components/GoogleLoginPromptModal";
 import { useFinance } from "./context/FinanceContext";
 
 function toBottomTab(tab: TabId): BottomTabId | null {
@@ -18,6 +22,7 @@ function toBottomTab(tab: TabId): BottomTabId | null {
 export default function App() {
   const [tab, setTab] = useState<TabId>("home");
   const { refreshFinanceFromCloud } = useFinance();
+  const { open: loginPromptOpen, dismiss: dismissLoginPrompt } = useGoogleLoginPrompt();
 
   useEffect(() => {
     if (tab !== "accounts" && tab !== "futureIncome" && tab !== "patrimony") return;
@@ -26,6 +31,7 @@ export default function App() {
 
   return (
     <>
+      <GoogleLoginPromptModal open={loginPromptOpen} onDismiss={dismissLoginPrompt} />
       <CloudSyncBadge />
       <main className="app-shell">
         <AppTopBar activeTab={tab} onNavigate={setTab} />

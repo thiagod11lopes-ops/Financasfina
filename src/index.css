@@ -3017,6 +3017,45 @@ textarea {
   box-shadow: none;
 }
 
+.login-prompt-backdrop {
+  z-index: 220;
+}
+
+.login-prompt-modal__lead {
+  margin: 6px 0 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.login-prompt-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px 20px;
+}
+
+.login-prompt-warning {
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  background: rgba(127, 29, 29, 0.22);
+}
+
+.login-prompt-warning p {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: #fecaca;
+}
+
+.login-prompt-modal__error {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #fca5a5;
+}
+
 .modal-head {
   flex-shrink: 0;
   display: flex;
