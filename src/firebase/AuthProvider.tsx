@@ -8,7 +8,6 @@ import {
   type ReactNode,
 } from "react";
 import {
-  getRedirectResult,
   GoogleAuthProvider,
   onAuthStateChanged,
   signInWithPopup,
@@ -16,16 +15,17 @@ import {
   signOut,
   type User,
 } from "firebase/auth";
-import { getFirebaseAuth } from "./auth";
+import { getFirebaseAuth, resolveGoogleRedirectOnce } from "./auth";
 import { isFirebaseConfigured } from "./config";
 import { clearGoogleRedirectPending, isGoogleRedirectPending } from "./loginRedirectState";
+
+const AUTH_INIT_TIMEOUT_MS = 12_000;
 
 function isIOSDevice(): boolean {
   if (typeof navigator === "undefined") return false;
   return /iPhone|iPad|iPod/i.test(navigator.userAgent);
 }
 
-/** Safari no iPhone/iPad — popup falha; redirect é obrigatório. */
 function isSafariBrowser(): boolean {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent;
@@ -37,7 +37,6 @@ function isAndroidDevice(): boolean {
   return /Android/i.test(navigator.userAgent);
 }
 
-/** iPhone Safari e telemóveis em geral usam redirect; Chrome Android também (ecrã tátil). */
 function shouldUseGoogleRedirect(): boolean {
   if (typeof window === "undefined") return false;
   if (isSafariBrowser() || isIOSDevice()) return true;
@@ -67,16 +66,20 @@ function formatAuthError(e: unknown): string {
     return "O login foi cancelado antes de concluir. Tente de novo.";
   }
   if (code === "auth/unauthorized-domain") {
-    return "Este endereço do site não está autorizado no Firebase. Adicione o domínio em Authentication → Domínios autorizados.";
+    return "Este endereço do site não está autorizado no Firebase. Adicione thiagod11lopes-ops.github.io em Authentication → Domínios autorizados.";
+  }
+  if (code === "auth/network-request-failed") {
+    return "Sem ligação à internet ou rede bloqueou o login. Verifique a Wi‑Fi e tente de novo.";
   }
   return e instanceof Error ? e.message : String(e);
 }
 
+const SAFARI_REDIRECT_HINT =
+  "Não foi possível concluir o login no Safari. Em Ajustes do iPhone → Safari, desative «Impedir rastreio entre sites», evite navegação privada e tente «Entrar com Google» em Ajustes.";
+
 type AuthContextValue = {
   configured: boolean;
-  /** `true` depois da primeira resolução do estado de sessão (ou logo se Firebase desligado). */
   ready: boolean;
-  /** Aguarda redirect + primeira emissão do listener (evita modal a reabrir no iPhone). */
   authInitializing: boolean;
   user: User | null;
   signInWithGoogle: () => Promise<void>;
@@ -108,6 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     let redirectChecked = false;
     let sawAuthAfterRedirect = false;
+    let cancelled = false;
 
     const finishAuthInit = () => {
       if (redirectChecked && sawAuthAfterRedirect) {
@@ -115,10 +119,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    void (async () => {
-      try {
-        await getRedirectResult(auth);
-      } catch (e: unknown) {
+    const forceFinishAuthInit = () => {
+      if (!cancelled) setAuthInitializing(false);
+    };
+
+    const timeoutId = window.setTimeout(forceFinishAuthInit, AUTH_INIT_TIMEOUT_MS);
+
+    void resolveGoogleRedirectOnce(auth)
+      .then((result) => {
+        if (cancelled) return;
+        if (isGoogleRedirectPending() && !result?.user) {
+          clearGoogleRedirectPending();
+          if (isSafariBrowser() || isIOSDevice()) {
+            setLastError(SAFARI_REDIRECT_HINT);
+          }
+        }
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
         const code =
           typeof e === "object" && e !== null && "code" in e
             ? String((e as { code: string }).code)
@@ -128,16 +146,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.warn("[Firebase auth redirect]", e);
         }
         clearGoogleRedirectPending();
-      } finally {
-        redirectChecked = true;
-        if (!isGoogleRedirectPending()) {
-          sawAuthAfterRedirect = true;
-        }
-        finishAuthInit();
+      })
+      .finally(() => {
+      if (cancelled) return;
+      redirectChecked = true;
+      if (!isGoogleRedirectPending()) {
+        sawAuthAfterRedirect = true;
       }
-    })();
+      finishAuthInit();
+    });
 
     const unsub = onAuthStateChanged(auth, (u) => {
+      if (cancelled) return;
       setUser(u);
       setReady(true);
       if (u) {
@@ -148,7 +168,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       finishAuthInit();
     });
-    return () => unsub();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+      unsub();
+    };
   }, [configured]);
 
   const signInWithGoogle = useCallback(async () => {
@@ -158,7 +183,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!auth) return;
     try {
       const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: "select_account" });
+      if (!shouldUseGoogleRedirect()) {
+        provider.setCustomParameters({ prompt: "select_account" });
+      }
       if (shouldUseGoogleRedirect()) {
         await signInWithRedirect(auth, provider);
         return;

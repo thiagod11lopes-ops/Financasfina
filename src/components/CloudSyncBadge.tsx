@@ -3,7 +3,7 @@ import { emailDisplayLabel } from "../utils/format";
 
 /** Indicador fixo: estado da sincronização Firebase (dados financeiros). */
 export function CloudSyncBadge() {
-  const { configured, ready, user } = useAuth();
+  const { configured, ready, authInitializing, user } = useAuth();
 
   if (!configured) {
     return (
@@ -17,11 +17,16 @@ export function CloudSyncBadge() {
     );
   }
 
-  if (!ready) {
+  if (!ready || authInitializing) {
     return (
-      <div className="cloud-sync-badge cloud-sync-badge--wait" title="A verificar sessão…">
+      <div
+        className="cloud-sync-badge cloud-sync-badge--wait"
+        title={authInitializing ? "A concluir login com Google…" : "A verificar sessão…"}
+      >
         <span className="cloud-sync-badge__dot cloud-sync-badge__dot--pulse" aria-hidden />
-        <span className="cloud-sync-badge__text">A carregar…</span>
+        <span className="cloud-sync-badge__text">
+          {authInitializing ? "A concluir login…" : "A carregar…"}
+        </span>
       </div>
     );
   }

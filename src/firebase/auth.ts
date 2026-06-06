@@ -1,29 +1,30 @@
+import type { FirebaseApp } from "firebase/app";
 import {
   browserLocalPersistence,
   browserPopupRedirectResolver,
   getAuth,
+  getRedirectResult,
+  inMemoryPersistence,
   indexedDBLocalPersistence,
   initializeAuth,
   type Auth,
+  type UserCredential,
 } from "firebase/auth";
-import { getFirebaseApp } from "./config";
 
-let cachedAuth: Auth | null | undefined;
+let cachedAuth: Auth | null = null;
+
+/** Uma vez por carregamento — Safari quebra se getRedirectResult for chamado duas vezes. */
+let redirectResultPromise: Promise<UserCredential | null> | null = null;
 
 /**
- * Auth com persistência IndexedDB + resolver de redirect — necessário para Safari no iPhone
- * concluir o login ao voltar da página da Google.
+ * Tem de correr logo após initializeApp, antes de getAuth() automático,
+ * para o Safari ter popupRedirectResolver no redirect da Google.
  */
-export function getFirebaseAuth(): Auth | null {
-  if (cachedAuth !== undefined) return cachedAuth;
-  const app = getFirebaseApp();
-  if (!app) {
-    cachedAuth = null;
-    return null;
-  }
+export function initFirebaseAuth(app: FirebaseApp): Auth {
+  if (cachedAuth) return cachedAuth;
   try {
     cachedAuth = initializeAuth(app, {
-      persistence: [indexedDBLocalPersistence, browserLocalPersistence],
+      persistence: [indexedDBLocalPersistence, browserLocalPersistence, inMemoryPersistence],
       popupRedirectResolver: browserPopupRedirectResolver,
     });
   } catch (e: unknown) {
@@ -38,4 +39,17 @@ export function getFirebaseAuth(): Auth | null {
     }
   }
   return cachedAuth;
+}
+
+export function getFirebaseAuth(): Auth | null {
+  return cachedAuth;
+}
+
+export function resolveGoogleRedirectOnce(auth: Auth): Promise<UserCredential | null> {
+  if (redirectResultPromise) return redirectResultPromise;
+  redirectResultPromise = getRedirectResult(auth).catch((e: unknown) => {
+    redirectResultPromise = null;
+    throw e;
+  });
+  return redirectResultPromise;
 }

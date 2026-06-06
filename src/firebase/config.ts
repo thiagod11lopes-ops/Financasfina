@@ -1,4 +1,5 @@
 import { getApps, initializeApp, type FirebaseApp } from "firebase/app";
+import { initFirebaseAuth } from "./auth";
 
 const keys = [
   "VITE_FIREBASE_API_KEY",
@@ -36,6 +37,11 @@ export function getFirebaseApp(): FirebaseApp | null {
     messagingSenderId: envStr("VITE_FIREBASE_MESSAGING_SENDER_ID"),
     appId: envStr("VITE_FIREBASE_APP_ID"),
   };
-  cached = getApps().length > 0 ? getApps()[0]! : initializeApp(config);
+  if (getApps().length > 0) {
+    cached = getApps()[0]!;
+  } else {
+    cached = initializeApp(config);
+    initFirebaseAuth(cached);
+  }
   return cached;
 }

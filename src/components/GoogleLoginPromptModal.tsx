@@ -27,7 +27,9 @@ export function useGoogleLoginPrompt(): {
     if (user) {
       clearGoogleRedirectPending();
       setRedirectPending(false);
+      return;
     }
+    setRedirectPending(isGoogleRedirectPending());
   }, [user]);
 
   const dismiss = useCallback(() => {
