@@ -7,7 +7,7 @@ export function useGoogleLoginPrompt(): {
   open: boolean;
   dismiss: () => void;
 } {
-  const { configured, ready, user } = useAuth();
+  const { configured, ready, redirectResolving, user } = useAuth();
   const [dismissed, setDismissed] = useState(() => {
     if (typeof window === "undefined") return false;
     try {
@@ -26,7 +26,7 @@ export function useGoogleLoginPrompt(): {
     setDismissed(true);
   }, []);
 
-  const open = configured && ready && !user && !dismissed;
+  const open = configured && ready && !redirectResolving && !user && !dismissed;
   return { open, dismiss };
 }
 
@@ -75,7 +75,8 @@ export function GoogleLoginPromptModal({
             <h2 id="login-prompt-title">Entre com Google</h2>
             <p id="login-prompt-desc" className="login-prompt-modal__lead">
               Para guardar os seus dados na nuvem e aceder-lhes em qualquer aparelho, inicie sessão
-              com a sua conta Google.
+              com a sua conta Google. No iPhone (Safari), o browser abre a página da Google e volta ao
+              app — isso é normal.
             </p>
           </div>
         </div>
@@ -97,7 +98,7 @@ export function GoogleLoginPromptModal({
             disabled={busy}
             onClick={() => void handleSignIn()}
           >
-            {busy ? "A abrir Google…" : "Entrar com Google"}
+            {busy ? "A redirecionar para Google…" : "Entrar com Google"}
           </button>
           <button
             type="button"
