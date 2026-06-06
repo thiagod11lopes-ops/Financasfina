@@ -1,4 +1,5 @@
 import { useAuth } from "../firebase/AuthProvider";
+import { emailDisplayLabel } from "../utils/format";
 
 /** Indicador fixo: estado da sincronização Firebase (dados financeiros). */
 export function CloudSyncBadge() {
@@ -37,7 +38,7 @@ export function CloudSyncBadge() {
         </div>
         {user.email ? (
           <span className="cloud-sync-badge__email" title={user.email}>
-            {user.email}
+            {emailDisplayLabel(user.email)}
           </span>
         ) : null}
       </div>

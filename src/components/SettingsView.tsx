@@ -8,7 +8,7 @@ import {
 import { useFinance } from "../context/FinanceContext";
 import { useAuth } from "../firebase/AuthProvider";
 import { useUserDocCloud } from "../firebase/userDocCloud";
-import { countMonthEntries, formatMonthLabelPt, monthKey } from "../utils/format";
+import { countMonthEntries, emailDisplayLabel, formatMonthLabelPt, monthKey } from "../utils/format";
 import { MonthYearPickerModal } from "./MonthYearPickerModal";
 import {
   USERS_ALL_OPTION,
@@ -125,7 +125,13 @@ export function SettingsView({ visible = true }: { visible?: boolean }) {
         ) : fbUser ? (
           <div className="settings-firebase-row">
             <p className="settings-muted">
-              Conta: <strong>{fbUser.email ?? fbUser.displayName ?? fbUser.uid}</strong>. Finanças, resumo, agenda e
+              Conta:{" "}
+              <strong title={fbUser.email ?? undefined}>
+                {fbUser.email
+                  ? emailDisplayLabel(fbUser.email)
+                  : (fbUser.displayName ?? fbUser.uid)}
+              </strong>
+              . Finanças, resumo, agenda e
               utilizadores sincronizam no Firestore; ao sair, guarda-se uma cópia local para usar sem login.
             </p>
             <button type="button" className="settings-btn settings-btn--outline" onClick={() => void signOutUser()}>
