@@ -311,13 +311,19 @@ export function TasksModal() {
                 Lista de compras por prioridade — use as setas para alterar a ordem.
               </p>
               <form className="tasks-shop-form" onSubmit={submitShopping}>
-                <input
-                  className="input tasks-shop-form__input"
-                  value={shopText}
-                  onChange={(e) => setShopText(e.target.value)}
-                  placeholder="Ex.: Leite, pão, detergente…"
-                  autoComplete="off"
-                />
+                <div className="tasks-shop-form__field">
+                  <label className="tasks-shop-form__label" htmlFor="shop-priority-input">
+                    Novo item
+                  </label>
+                  <input
+                    id="shop-priority-input"
+                    className="input tasks-shop-form__input"
+                    value={shopText}
+                    onChange={(e) => setShopText(e.target.value)}
+                    placeholder="Ex.: Leite, pão, detergente…"
+                    autoComplete="off"
+                  />
+                </div>
                 <button type="submit" className="btn btn-primary tasks-shop-form__submit">
                   Adicionar
                 </button>

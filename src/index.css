@@ -5102,18 +5102,46 @@ textarea {
 }
 
 .tasks-shop-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  gap: 10px;
+  width: 100%;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(251, 146, 60, 0.28);
+  background: rgba(15, 23, 42, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.tasks-shop-form__field {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+}
+
+.tasks-shop-form__label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #fdba74;
 }
 
 .tasks-shop-form__input {
+  display: block;
   width: 100%;
   min-width: 0;
+  box-sizing: border-box;
 }
 
 .tasks-shop-form__submit {
+  display: block;
   width: 100%;
+  grid-row: 2;
+  margin: 0;
 }
 
 .tasks-shop-list {
