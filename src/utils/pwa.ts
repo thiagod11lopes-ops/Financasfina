@@ -14,9 +14,14 @@ export function isInstalledPwa(): boolean {
   return window.matchMedia("(display-mode: standalone)").matches;
 }
 
-/** iPhone em modo PWA: Firebase redirect não navega — login tem de ser no Safari. */
-export function requiresBrowserForGoogleLogin(): boolean {
+/** iPhone em modo PWA: mostrar ajuda para abrir no Safari se o popup falhar. */
+export function shouldShowPwaSafariLoginHint(): boolean {
   return isIOSDevice() && isInstalledPwa();
+}
+
+/** @deprecated Use shouldShowPwaSafariLoginHint — o login via popup é tentado primeiro. */
+export function requiresBrowserForGoogleLogin(): boolean {
+  return false;
 }
 
 export function getAbsoluteAppUrl(): string {

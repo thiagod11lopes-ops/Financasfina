@@ -22,7 +22,7 @@ import {
   isGoogleRedirectPending,
   markGoogleRedirectPending,
 } from "./loginRedirectState";
-import { PWA_IOS_LOGIN_MESSAGE, requiresBrowserForGoogleLogin } from "../utils/pwa";
+import { isInstalledPwa, PWA_IOS_LOGIN_MESSAGE } from "../utils/pwa";
 
 const AUTH_INIT_TIMEOUT_MS = 12_000;
 
@@ -42,12 +42,13 @@ function isAndroidDevice(): boolean {
   return /Android/i.test(navigator.userAgent);
 }
 
+/**
+ * Redirect direto quebra no Safari 16.1+ e no GitHub Pages (cookies de terceiros).
+ * O popup com browserPopupRedirectResolver funciona nesses browsers.
+ * Mantemos redirect só no Android, onde o popup costuma falhar.
+ */
 function shouldUseGoogleRedirect(): boolean {
-  if (typeof window === "undefined") return false;
-  if (isSafariBrowser() || isIOSDevice()) return true;
-  if (isAndroidDevice()) return true;
-  if ("ontouchstart" in window) return true;
-  return window.matchMedia("(max-width: 640px)").matches;
+  return isAndroidDevice();
 }
 
 function isPopupAuthError(code: string): boolean {
@@ -80,7 +81,7 @@ function formatAuthError(e: unknown): string {
 }
 
 const SAFARI_REDIRECT_HINT =
-  "Não foi possível concluir o login no Safari. Em Ajustes do iPhone → Safari, desative «Impedir rastreio entre sites», evite navegação privada e tente «Entrar com Google» em Ajustes.";
+  "Não foi possível concluir o login. No iPhone aberto pelo ícone do ecrã, use Safari (copie o endereço em Ajustes). No Safari normal, evite navegação privada e desative «Impedir rastreio entre sites» em Ajustes → Safari.";
 
 type AuthContextValue = {
   configured: boolean;
@@ -185,11 +186,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithGoogle = useCallback(async () => {
     setLastError(null);
     if (!configured) return;
-    if (requiresBrowserForGoogleLogin()) {
-      setLastError(PWA_IOS_LOGIN_MESSAGE);
-      clearGoogleRedirectPending();
-      return;
-    }
     const auth = getFirebaseAuth();
     if (!auth) {
       setLastError("Não foi possível iniciar a autenticação Firebase.");
@@ -197,14 +193,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     try {
       const provider = new GoogleAuthProvider();
-      if (!shouldUseGoogleRedirect()) {
-        provider.setCustomParameters({ prompt: "select_account" });
-      }
+      provider.setCustomParameters({ prompt: "select_account" });
+
       if (shouldUseGoogleRedirect()) {
         markGoogleRedirectPending();
         await signInWithRedirect(auth, provider);
         return;
       }
+
       try {
         await signInWithPopup(auth, provider);
         clearGoogleRedirectPending();
@@ -213,12 +209,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           typeof popupErr === "object" && popupErr !== null && "code" in popupErr
             ? String((popupErr as { code: string }).code)
             : "";
-        if (isPopupAuthError(code)) {
+        if (isPopupAuthError(code) && !isSafariBrowser() && !isIOSDevice()) {
           markGoogleRedirectPending();
           await signInWithRedirect(auth, provider);
           return;
         }
         clearGoogleRedirectPending();
+        if ((isIOSDevice() && isInstalledPwa()) || (isSafariBrowser() && isPopupAuthError(code))) {
+          setLastError(PWA_IOS_LOGIN_MESSAGE);
+          return;
+        }
         throw popupErr;
       }
     } catch (e) {

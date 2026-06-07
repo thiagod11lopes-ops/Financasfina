@@ -3057,6 +3057,18 @@ textarea {
   color: #fca5a5;
 }
 
+.pwa-safari-login-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pwa-safari-login-hint__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .modal-head {
   flex-shrink: 0;
   display: flex;
