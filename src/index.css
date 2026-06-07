@@ -5103,16 +5103,17 @@ textarea {
 
 .tasks-shop-form {
   display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 
 .tasks-shop-form__input {
-  flex: 1;
+  width: 100%;
   min-width: 0;
 }
 
 .tasks-shop-form__submit {
-  flex-shrink: 0;
+  width: 100%;
 }
 
 .tasks-shop-list {
