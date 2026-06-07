@@ -1,0 +1,33 @@
+{
+  "name": "Finanças",
+  "short_name": "Finanças",
+  "description": "Gestão financeira familiar com sincronização na nuvem.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#030712",
+  "theme_color": "#030712",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "./icons.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Lista de compras",
+      "short_name": "Compras",
+      "description": "Abrir a lista de compras sincronizada",
+      "url": "https://thiagod11lopes-ops.github.io/Lista-de-Compras/?fromFinancasPwa=1",
+      "icons": [
+        {
+          "src": "./icons.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
+        }
+      ]
+    }
+  ]
+}

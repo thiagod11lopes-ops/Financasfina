@@ -4,7 +4,7 @@ import {
   activateShoppingListSyncForUser,
   resolveShoppingListUrl,
 } from "../shoppingList/syncPrefs";
-import { openExternalUrl } from "../utils/pwa";
+import { appendFromFinancasPwaParam, isInstalledPwa, openExternalUrl } from "../utils/pwa";
 import { PageBranding } from "./PageBranding";
 import { IconCart, IconSettings } from "./Icons";
 import type { TabId } from "./BottomNav";
@@ -22,7 +22,9 @@ export function AppTopBar({
     if (user?.email && user.uid) {
       void activateShoppingListSyncForUser(user.email, user.uid);
     }
-    openExternalUrl(resolveShoppingListUrl(user?.email ?? null));
+    let url = resolveShoppingListUrl(user?.email ?? null);
+    if (isInstalledPwa()) url = appendFromFinancasPwaParam(url);
+    openExternalUrl(url);
   }, [user]);
 
   return (

@@ -29,11 +29,14 @@ export function getAbsoluteAppUrl(): string {
   return new URL(base, window.location.origin).href;
 }
 
-/** Abre URL no clique do utilizador — sem await (Safari bloqueia opens atrasados). */
+/**
+ * Abre URL no clique do utilizador — sem await (Safari bloqueia opens atrasados).
+ * No PWA mantém modo ecrã inteiro (navega na mesma janela standalone).
+ */
 export function openExternalUrl(url: string): void {
   if (typeof window === "undefined" || typeof document === "undefined") return;
 
-  if (isIOSDevice() && isInstalledPwa()) {
+  if (isInstalledPwa()) {
     window.location.href = url;
     return;
   }
@@ -46,4 +49,15 @@ export function openExternalUrl(url: string): void {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+}
+
+/** Marca que a Lista foi aberta a partir do PWA Finanças (sincronização + UI na Lista). */
+export function appendFromFinancasPwaParam(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.set("fromFinancasPwa", "1");
+    return parsed.toString();
+  } catch {
+    return url;
+  }
 }
