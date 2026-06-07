@@ -597,14 +597,15 @@ textarea {
   text-overflow: ellipsis;
 }
 
-@media (max-width: 520px) {
+@media (max-width: 559px) {
   .dash-overview-hero.card {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+    padding: 12px;
   }
 
-  .dash-overview-hero__balance {
-    padding-bottom: 4px;
-    border-bottom: 1px solid rgba(51, 65, 85, 0.45);
+  .dash-overview-hero__projection {
+    padding: 10px 26px 10px 10px;
   }
 }
 
