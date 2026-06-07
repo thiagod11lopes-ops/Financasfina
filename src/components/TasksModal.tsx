@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { monthGrid, WEEKDAY_HEADERS } from "../tasks/calendarUtils";
 import { todayYMD } from "../tasks/persist";
 import { useTasks } from "../tasks/TasksContext";
 import { formatMonthLabelPt } from "../utils/format";
 import {
+  IconCalendar,
   IconCart,
   IconChevronLeft,
   IconChevronRight,
@@ -36,10 +37,14 @@ export function TasksModal() {
   const [tab, setTab] = useState<TabId>("tasks");
   const [title, setTitle] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [taskDatePickerOpen, setTaskDatePickerOpen] = useState(false);
+  const [pickerCalYear, setPickerCalYear] = useState(() => new Date().getFullYear());
+  const [pickerCalMonth, setPickerCalMonth] = useState(() => new Date().getMonth() + 1);
   const [shopText, setShopText] = useState("");
   const [calYear, setCalYear] = useState(() => new Date().getFullYear());
   const [calMonth, setCalMonth] = useState(() => new Date().getMonth() + 1);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const taskDateAnchorRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!modalOpen) return;
@@ -92,8 +97,56 @@ export function TasksModal() {
   );
 
   const monthLabel = formatMonthLabelPt(`${calYear}-${String(calMonth).padStart(2, "0")}`);
+  const pickerMonthLabel = formatMonthLabelPt(
+    `${pickerCalYear}-${String(pickerCalMonth).padStart(2, "0")}`,
+  );
+  const pickerCells = useMemo(
+    () => monthGrid(pickerCalYear, pickerCalMonth),
+    [pickerCalYear, pickerCalMonth],
+  );
   const grid = monthGrid(calYear, calMonth);
   const today = todayYMD();
+
+  useEffect(() => {
+    if (!taskDatePickerOpen) return;
+    const onDoc = (ev: MouseEvent | TouchEvent) => {
+      const el = taskDateAnchorRef.current;
+      const t = ev.target;
+      if (el && t instanceof Node && !el.contains(t)) setTaskDatePickerOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("touchstart", onDoc, { passive: true });
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("touchstart", onDoc);
+    };
+  }, [taskDatePickerOpen]);
+
+  useEffect(() => {
+    if (!taskDatePickerOpen) return;
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") setTaskDatePickerOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [taskDatePickerOpen]);
+
+  const openTaskDatePicker = useCallback(() => {
+    setTaskDatePickerOpen((was) => {
+      if (!was) {
+        if (dueDate && /^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+          const [y, m] = dueDate.split("-").map(Number);
+          setPickerCalYear(y);
+          setPickerCalMonth(m);
+        } else {
+          const d = new Date();
+          setPickerCalYear(d.getFullYear());
+          setPickerCalMonth(d.getMonth() + 1);
+        }
+      }
+      return !was;
+    });
+  }, [dueDate]);
 
   const submitTask = useCallback(
     (e: FormEvent) => {
@@ -101,6 +154,7 @@ export function TasksModal() {
       addTask(title, dueDate || undefined);
       setTitle("");
       setDueDate("");
+      setTaskDatePickerOpen(false);
     },
     [addTask, title, dueDate],
   );
@@ -169,9 +223,104 @@ export function TasksModal() {
           {tab === "tasks" ? (
             <div className="tasks-panel">
               <form className="tasks-form" onSubmit={submitTask}>
-                <label className="tasks-form__label" htmlFor="task-title">
-                  Nova tarefa
-                </label>
+                <div className="tasks-form__label-row">
+                  <label className="tasks-form__label" htmlFor="task-title">
+                    Nova tarefa
+                  </label>
+                  <div className="tasks-form__date-anchor" ref={taskDateAnchorRef}>
+                    <button
+                      type="button"
+                      className={`tasks-form__date-btn${taskDatePickerOpen ? " is-active" : ""}${dueDate ? " has-date" : ""}`}
+                      aria-expanded={taskDatePickerOpen}
+                      aria-haspopup="dialog"
+                      aria-controls="tasks-form-date-popover"
+                      title={dueDate ? `Data: ${formatDueLabel(dueDate)}` : "Escolher data (opcional)"}
+                      onClick={openTaskDatePicker}
+                    >
+                      <IconCalendar aria-hidden />
+                    </button>
+                    {taskDatePickerOpen ? (
+                      <div
+                        id="tasks-form-date-popover"
+                        className="tasks-form__date-popover"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="tasks-form-date-popover-title"
+                      >
+                        <div className="tasks-form__date-popover-glow" aria-hidden />
+                        <div className="tasks-form-mini-cal-toolbar">
+                          <button
+                            type="button"
+                            className="tasks-icon-btn tasks-icon-btn--compact"
+                            aria-label="Mês anterior"
+                            onClick={() => {
+                              if (pickerCalMonth <= 1) {
+                                setPickerCalMonth(12);
+                                setPickerCalYear((y) => y - 1);
+                              } else setPickerCalMonth((m) => m - 1);
+                            }}
+                          >
+                            <IconChevronLeft aria-hidden />
+                          </button>
+                          <h4 id="tasks-form-date-popover-title" className="tasks-form-mini-cal-toolbar__title">
+                            {pickerMonthLabel}
+                          </h4>
+                          <button
+                            type="button"
+                            className="tasks-icon-btn tasks-icon-btn--compact"
+                            aria-label="Próximo mês"
+                            onClick={() => {
+                              if (pickerCalMonth >= 12) {
+                                setPickerCalMonth(1);
+                                setPickerCalYear((y) => y + 1);
+                              } else setPickerCalMonth((m) => m + 1);
+                            }}
+                          >
+                            <IconChevronRight aria-hidden />
+                          </button>
+                        </div>
+                        <div className="tasks-form-mini-cal-weekdays" aria-hidden>
+                          {WEEKDAY_HEADERS.map((w) => (
+                            <span key={w} className="tasks-form-mini-cal-weekdays__cell">
+                              {w}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="tasks-form-mini-cal-grid">
+                          {pickerCells.map((c) => {
+                            const sel = dueDate === c.date;
+                            const isToday = today === c.date;
+                            const hasTasks = taskDates.has(c.date);
+                            return (
+                              <button
+                                key={c.date}
+                                type="button"
+                                className={`tasks-form-mini-cal-day${c.inMonth ? "" : " is-muted"}${sel ? " is-selected" : ""}${isToday ? " is-today" : ""}${hasTasks ? " has-tasks" : ""}`}
+                                onClick={() => {
+                                  setDueDate(c.date);
+                                  setTaskDatePickerOpen(false);
+                                }}
+                              >
+                                <span className="tasks-form-mini-cal-day__num">{Number(c.date.slice(8))}</span>
+                                {hasTasks ? <span className="tasks-form-mini-cal-day__dot" aria-hidden /> : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <button
+                          type="button"
+                          className="tasks-form__date-clear"
+                          onClick={() => {
+                            setDueDate("");
+                            setTaskDatePickerOpen(false);
+                          }}
+                        >
+                          Sem data
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
                 <input
                   id="task-title"
                   className="input tasks-form__input"
@@ -180,16 +329,18 @@ export function TasksModal() {
                   placeholder="O que precisa resolver?"
                   autoComplete="off"
                 />
-                <label className="tasks-form__label" htmlFor="task-date">
-                  Data <span className="tasks-form__optional">(opcional)</span>
-                </label>
-                <input
-                  id="task-date"
-                  className="input tasks-form__input"
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                />
+                {dueDate ? (
+                  <p className="tasks-form__date-hint">
+                    <strong>Data:</strong> {formatDueLabel(dueDate)}{" "}
+                    <button
+                      type="button"
+                      className="tasks-text-btn"
+                      onClick={() => setDueDate("")}
+                    >
+                      Limpar
+                    </button>
+                  </p>
+                ) : null}
                 <button type="submit" className="btn btn-primary tasks-form__submit">
                   Adicionar tarefa
                 </button>
