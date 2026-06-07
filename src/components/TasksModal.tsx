@@ -471,7 +471,7 @@ export function TasksModal() {
                     className="input tasks-shop-form__input"
                     value={shopText}
                     onChange={(e) => setShopText(e.target.value)}
-                    placeholder="Ex.: Leite, pão, detergente…"
+                    placeholder="Novo item"
                     autoComplete="off"
                   />
                 </div>
