@@ -223,10 +223,18 @@ export function TasksModal() {
           {tab === "tasks" ? (
             <div className="tasks-panel">
               <form className="tasks-form" onSubmit={submitTask}>
-                <div className="tasks-form__label-row">
-                  <label className="tasks-form__label" htmlFor="task-title">
-                    Nova tarefa
-                  </label>
+                <label className="tasks-form__label" htmlFor="task-title">
+                  Nova tarefa
+                </label>
+                <div className="tasks-form__input-row">
+                  <input
+                    id="task-title"
+                    className="input tasks-form__input"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="O que precisa resolver?"
+                    autoComplete="off"
+                  />
                   <div className="tasks-form__date-anchor" ref={taskDateAnchorRef}>
                     <button
                       type="button"
@@ -321,14 +329,6 @@ export function TasksModal() {
                     ) : null}
                   </div>
                 </div>
-                <input
-                  id="task-title"
-                  className="input tasks-form__input"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="O que precisa resolver?"
-                  autoComplete="off"
-                />
                 {dueDate ? (
                   <p className="tasks-form__date-hint">
                     <strong>Data:</strong> {formatDueLabel(dueDate)}{" "}
