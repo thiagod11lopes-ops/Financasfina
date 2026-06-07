@@ -9,10 +9,22 @@
   "lang": "pt-BR",
   "icons": [
     {
-      "src": "./icons.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "./icone-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
       "purpose": "any"
+    },
+    {
+      "src": "./icone-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icone-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "shortcuts": [
@@ -23,9 +35,9 @@
       "url": "https://thiagod11lopes-ops.github.io/Lista-de-Compras/?fromFinancasPwa=1",
       "icons": [
         {
-          "src": "./icons.svg",
-          "sizes": "any",
-          "type": "image/svg+xml"
+          "src": "./icone-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
         }
       ]
     }
