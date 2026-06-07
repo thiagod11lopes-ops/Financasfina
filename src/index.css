@@ -1781,17 +1781,15 @@ textarea {
 
 .dash-stats-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   grid-template-areas:
-    "mov-head"
-    "mov-1"
-    "mov-2"
-    "mov-3"
-    "orc-head"
-    "orc-1"
-    "orc-2"
-    "orc-3";
-  gap: 8px;
+    "mov-head orc-head"
+    "mov-1 orc-1"
+    "mov-2 orc-2"
+    "mov-3 orc-3";
+  column-gap: 8px;
+  row-gap: 8px;
+  align-items: stretch;
 }
 
 .dash-stats-cell {
@@ -1810,7 +1808,14 @@ textarea {
 }
 
 .dash-stats-group__head--orc {
-  margin-top: 6px;
+  margin-top: 0;
+  padding-left: 8px;
+  border-left: 1px solid rgba(51, 65, 85, 0.55);
+}
+
+.dash-stats-cell--orc {
+  padding-left: 8px;
+  border-left: 1px solid rgba(51, 65, 85, 0.55);
 }
 
 .dash-stats-group__title {
@@ -1918,26 +1923,12 @@ textarea {
 
 @media (min-width: 560px) {
   .dash-stats-layout {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-areas:
-      "mov-head orc-head"
-      "mov-1 orc-1"
-      "mov-2 orc-2"
-      "mov-3 orc-3";
     column-gap: 12px;
-    row-gap: 8px;
-    align-items: stretch;
   }
 
-  .dash-stats-group__head--orc {
-    margin-top: 0;
-    padding-left: 12px;
-    border-left: 1px solid rgba(51, 65, 85, 0.55);
-  }
-
+  .dash-stats-group__head--orc,
   .dash-stats-cell--orc {
     padding-left: 12px;
-    border-left: 1px solid rgba(51, 65, 85, 0.55);
   }
 
   .dash-stats-group__title {
