@@ -29,35 +29,21 @@ export function getAbsoluteAppUrl(): string {
   return new URL(base, window.location.origin).href;
 }
 
-/**
- * Reserva uma janela no clique (antes de await) para o Safari não bloquear o open.
- * No PWA do iPhone devolve null — aí usamos navegação na mesma janela.
- */
-export function prepareAsyncUrlOpen(): Window | null {
-  if (typeof window === "undefined") return null;
-  if (isIOSDevice() && isInstalledPwa()) return null;
-  try {
-    return window.open("about:blank", "_blank", "noopener,noreferrer");
-  } catch {
-    return null;
-  }
-}
+/** Abre URL no clique do utilizador — sem await (Safari bloqueia opens atrasados). */
+export function openExternalUrl(url: string): void {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
 
-/** Conclui abertura de URL após trabalho assíncrono (ex.: gerar roomHash). */
-export function completeAsyncUrlOpen(url: string, placeholder: Window | null): void {
-  if (typeof window === "undefined") return;
-  if (placeholder && !placeholder.closed) {
-    try {
-      placeholder.location.replace(url);
-      return;
-    } catch {
-      /* fallback abaixo */
-    }
-  }
   if (isIOSDevice() && isInstalledPwa()) {
-    window.location.assign(url);
+    window.location.href = url;
     return;
   }
-  const win = window.open(url, "_blank", "noopener,noreferrer");
-  if (!win) window.location.assign(url);
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }

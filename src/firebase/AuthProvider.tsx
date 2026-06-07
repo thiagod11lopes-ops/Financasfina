@@ -22,6 +22,7 @@ import {
   isGoogleRedirectPending,
   markGoogleRedirectPending,
 } from "./loginRedirectState";
+import { activateShoppingListSyncForUser } from "../shoppingList/syncPrefs";
 import { isInstalledPwa, PWA_IOS_LOGIN_MESSAGE } from "../utils/pwa";
 
 const AUTH_INIT_TIMEOUT_MS = 12_000;
@@ -170,6 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (u) {
         clearGoogleRedirectPending();
         sawAuthAfterRedirect = true;
+        if (u.email) void activateShoppingListSyncForUser(u.email, u.uid);
       } else if (redirectChecked) {
         sawAuthAfterRedirect = true;
       }

@@ -37,6 +37,30 @@ export function saveShoppingListAccountEmail(email: string): void {
   }
 }
 
+export function readShoppingListSyncPrefs(): ShoppingListSyncPrefs | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(SHOPPING_LIST_SYNC_PREFS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<ShoppingListSyncPrefs>;
+    const roomHash =
+      typeof parsed.roomHash === "string" && /^[a-f0-9]{64}$/.test(parsed.roomHash)
+        ? parsed.roomHash
+        : null;
+    if (!parsed.ativo || !roomHash) return null;
+    return { ativo: true, roomHash };
+  } catch {
+    return null;
+  }
+}
+
+/** URL pronta no clique — usa prefs já gravadas (pré-calculadas no login). */
+export function resolveShoppingListUrl(email?: string | null): string {
+  if (!email) return SHOPPING_LIST_URL;
+  const prefs = readShoppingListSyncPrefs();
+  return buildShoppingListUrl(prefs?.roomHash ?? null, email);
+}
+
 /** Liga a lista à conta Google (email + uid) antes de abrir a app externa. */
 export async function activateShoppingListSyncForUser(email: string, uid: string): Promise<string> {
   const roomHash = await hashShoppingListRoom(email, uid);

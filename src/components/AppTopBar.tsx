@@ -2,9 +2,9 @@ import { useCallback } from "react";
 import { useAuth } from "../firebase/AuthProvider";
 import {
   activateShoppingListSyncForUser,
-  buildShoppingListUrl,
+  resolveShoppingListUrl,
 } from "../shoppingList/syncPrefs";
-import { completeAsyncUrlOpen, prepareAsyncUrlOpen } from "../utils/pwa";
+import { openExternalUrl } from "../utils/pwa";
 import { PageBranding } from "./PageBranding";
 import { IconCart, IconSettings } from "./Icons";
 import type { TabId } from "./BottomNav";
@@ -19,19 +19,10 @@ export function AppTopBar({
   const { user } = useAuth();
 
   const openShoppingList = useCallback(() => {
-    const placeholder = prepareAsyncUrlOpen();
-    void (async () => {
-      let url = buildShoppingListUrl();
-      if (user?.email && user.uid) {
-        try {
-          const roomHash = await activateShoppingListSyncForUser(user.email, user.uid);
-          url = buildShoppingListUrl(roomHash, user.email);
-        } catch {
-          /* abre mesmo sem prefs se o browser bloquear crypto/localStorage */
-        }
-      }
-      completeAsyncUrlOpen(url, placeholder);
-    })();
+    if (user?.email && user.uid) {
+      void activateShoppingListSyncForUser(user.email, user.uid);
+    }
+    openExternalUrl(resolveShoppingListUrl(user?.email ?? null));
   }, [user]);
 
   return (
