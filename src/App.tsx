@@ -8,6 +8,8 @@ import { FutureIncomesView } from "./components/FutureIncomesView";
 import { PatrimonyView } from "./components/PatrimonyView";
 import { SettingsView } from "./components/SettingsView";
 import { CloudSyncBadge } from "./components/CloudSyncBadge";
+import { TaskAlarmBanner } from "./components/TaskAlarmBanner";
+import { TasksModal } from "./components/TasksModal";
 import {
   GoogleLoginPromptModal,
   useGoogleLoginPrompt,
@@ -33,6 +35,8 @@ export default function App() {
     <>
       <GoogleLoginPromptModal open={loginPromptOpen} onDismiss={dismissLoginPrompt} />
       <CloudSyncBadge />
+      <TaskAlarmBanner />
+      <TasksModal />
       <main className="app-shell">
         <AppTopBar activeTab={tab} onNavigate={setTab} />
         {/*

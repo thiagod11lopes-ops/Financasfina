@@ -33,7 +33,8 @@ import {
   type ExpenseAccountOption,
   type ExpenseAccountTarget,
 } from "./expenseAccountPicker";
-import { IconAgenda, IconCalendar, IconChevronLeft, IconChevronRight, IconPlus, IconX } from "./Icons";
+import { useTasks } from "../tasks/TasksContext";
+import { IconAgenda, IconCalendar, IconChevronLeft, IconChevronRight, IconPlus, IconTasks, IconX } from "./Icons";
 import { MovementSuccessModal, type MovementSuccessKind } from "./MovementSuccessModal";
 import { MonthYearPickerModal } from "./MonthYearPickerModal";
 import {
@@ -70,6 +71,7 @@ function entryDateForMonth(ym: string): string {
 
 export function Dashboard({ visible = true }: { visible?: boolean }) {
   const cloud = useUserDocCloud();
+  const { openModal: openTasksModal } = useTasks();
   const {
     state,
     bootstrapNewMonth,
@@ -546,6 +548,15 @@ export function Dashboard({ visible = true }: { visible?: boolean }) {
               title="Agenda familiar"
             >
               <IconAgenda aria-hidden />
+            </button>
+            <button
+              type="button"
+              className="dashboard-month-tasks-btn"
+              onClick={openTasksModal}
+              aria-label="Abrir tarefas"
+              title="Tarefas"
+            >
+              <IconTasks aria-hidden />
             </button>
           </div>
           {multi ? (

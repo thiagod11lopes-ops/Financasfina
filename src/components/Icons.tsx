@@ -135,6 +135,24 @@ export function IconChevronRight(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function IconChevronUp(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M18 15l-6-6-6 6" />
+    </svg>
+  );
+}
+
+/** Tarefas / checklist. */
+export function IconTasks(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M9 6h12M9 12h12M9 18h12" />
+      <path d="M4 6l1.5 1.5L7 5M4 12l1.5 1.5L7 11M4 18l1.5 1.5L7 17" />
+    </svg>
+  );
+}
+
 export function IconX(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" {...props}>
