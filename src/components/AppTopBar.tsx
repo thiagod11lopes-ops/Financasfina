@@ -4,6 +4,7 @@ import {
   activateShoppingListSyncForUser,
   buildShoppingListUrl,
 } from "../shoppingList/syncPrefs";
+import { completeAsyncUrlOpen, prepareAsyncUrlOpen } from "../utils/pwa";
 import { PageBranding } from "./PageBranding";
 import { IconCart, IconSettings } from "./Icons";
 import type { TabId } from "./BottomNav";
@@ -17,17 +18,20 @@ export function AppTopBar({
 }) {
   const { user } = useAuth();
 
-  const openShoppingList = useCallback(async () => {
-    let url = buildShoppingListUrl();
-    if (user?.email && user.uid) {
-      try {
-        const roomHash = await activateShoppingListSyncForUser(user.email, user.uid);
-        url = buildShoppingListUrl(roomHash, user.email);
-      } catch {
-        /* abre mesmo sem prefs se o browser bloquear crypto/localStorage */
+  const openShoppingList = useCallback(() => {
+    const placeholder = prepareAsyncUrlOpen();
+    void (async () => {
+      let url = buildShoppingListUrl();
+      if (user?.email && user.uid) {
+        try {
+          const roomHash = await activateShoppingListSyncForUser(user.email, user.uid);
+          url = buildShoppingListUrl(roomHash, user.email);
+        } catch {
+          /* abre mesmo sem prefs se o browser bloquear crypto/localStorage */
+        }
       }
-    }
-    window.open(url, "_blank", "noopener,noreferrer");
+      completeAsyncUrlOpen(url, placeholder);
+    })();
   }, [user]);
 
   return (
@@ -35,7 +39,7 @@ export function AppTopBar({
       <button
         type="button"
         className="app-top-bar__btn"
-        onClick={() => void openShoppingList()}
+        onClick={openShoppingList}
         aria-label="Lista de compras"
         title={
           user?.email
