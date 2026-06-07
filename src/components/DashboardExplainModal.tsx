@@ -1,19 +1,27 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { DASHBOARD_METRIC_EXPLAIN, type DashboardMetricKey } from "./dashboardMetricExplain";
 import { IconX } from "./Icons";
 
 const TYPEWRITER_MS = 38;
 
-function TypewriterSubtitle({ text }: { text: string }) {
+function TypewriterSubtitle({ text, onComplete }: { text: string; onComplete?: () => void }) {
   const [displayed, setDisplayed] = useState("");
+  const [done, setDone] = useState(false);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
   useEffect(() => {
     setDisplayed("");
+    setDone(false);
     let index = 0;
     const timer = window.setInterval(() => {
       index += 1;
       setDisplayed(text.slice(0, index));
-      if (index >= text.length) window.clearInterval(timer);
+      if (index >= text.length) {
+        window.clearInterval(timer);
+        setDone(true);
+        onCompleteRef.current?.();
+      }
     }, TYPEWRITER_MS);
     return () => window.clearInterval(timer);
   }, [text]);
@@ -21,9 +29,11 @@ function TypewriterSubtitle({ text }: { text: string }) {
   return (
     <p className="dash-explain-subtitle" aria-live="polite">
       <span className="dash-explain-subtitle__text">{displayed}</span>
-      <span className="dash-explain-subtitle__cursor" aria-hidden>
-        |
-      </span>
+      {!done ? (
+        <span className="dash-explain-subtitle__cursor" aria-hidden>
+          |
+        </span>
+      ) : null}
     </p>
   );
 }
@@ -37,6 +47,12 @@ type Props = {
 export function DashboardExplainModal({ metric, monthLabel, onClose }: Props) {
   const open = metric !== null;
   const content = metric ? DASHBOARD_METRIC_EXPLAIN[metric] : null;
+  const [showEditGuide, setShowEditGuide] = useState(false);
+  const revealEditGuide = useCallback(() => setShowEditGuide(true), []);
+
+  useEffect(() => {
+    setShowEditGuide(false);
+  }, [metric]);
 
   useEffect(() => {
     if (!open) return;
@@ -78,7 +94,13 @@ export function DashboardExplainModal({ metric, monthLabel, onClose }: Props) {
           </button>
         </header>
         <div className="dash-explain-body">
-          <TypewriterSubtitle key={metric} text={content.subtitle} />
+          <TypewriterSubtitle key={metric} text={content.subtitle} onComplete={revealEditGuide} />
+          {showEditGuide ? (
+            <div className="dash-explain-edit-guide">
+              <p className="dash-explain-edit-guide__label">Como chegar lá</p>
+              <p className="dash-explain-edit-guide__text">{content.editGuide}</p>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

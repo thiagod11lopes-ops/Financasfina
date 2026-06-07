@@ -2191,9 +2191,36 @@ textarea {
   z-index: 1;
   flex: 1;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0;
   padding: 24px 28px 32px;
   min-height: 140px;
+}
+
+.dash-explain-edit-guide {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  animation: dash-explain-fade-in 0.35s ease;
+}
+
+.dash-explain-edit-guide__label {
+  margin: 0 0 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.dash-explain-edit-guide__text {
+  margin: 0;
+  font-size: clamp(0.9rem, 3.2vw, 1.05rem);
+  font-weight: 400;
+  line-height: 1.55;
+  color: var(--text);
 }
 
 .dash-explain-subtitle {
