@@ -1,4 +1,4 @@
-﻿import { useCallback, type SVGProps } from "react";
+import { useCallback, type SVGProps } from "react";
 import { useAuth } from "../firebase/AuthProvider";
 import {
   activateShoppingListSyncForUser,
@@ -46,7 +46,9 @@ export function AppTopBar({
   const openVaquinhas = useCallback(() => {
     const base = import.meta.env.BASE_URL || "/";
     const prefix = base.endsWith("/") ? base : `${base}/`;
-    window.location.assign(`${prefix}vaquinhas/`);
+    // Soft navigate: evita 404 do GitHub Pages em rotas SPA.
+    window.history.pushState({}, "", `${prefix}vaquinhas/`);
+    window.dispatchEvent(new PopStateEvent("popstate"));
   }, []);
 
   return (
@@ -89,4 +91,3 @@ export function AppTopBar({
     </header>
   );
 }
-

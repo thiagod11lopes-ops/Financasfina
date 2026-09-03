@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { BottomNav, type BottomTabId, type TabId } from "./components/BottomNav";
 import { AppTopBar } from "./components/AppTopBar";
 import { Dashboard } from "./components/Dashboard";
@@ -22,9 +22,9 @@ function toBottomTab(tab: TabId): BottomTabId | null {
   return tab;
 }
 
-function isVaquinhasPath(): boolean {
+function isVaquinhasPath(pathname = window.location.pathname): boolean {
   const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
-  const path = window.location.pathname.replace(/\/$/, "");
+  const path = pathname.replace(/\/$/, "");
   return path === `${base}/vaquinhas` || path.startsWith(`${base}/vaquinhas/`);
 }
 
@@ -71,6 +71,14 @@ function FinancasShell() {
 }
 
 export default function App() {
-  if (isVaquinhasPath()) return <VaquinhasApp />;
+  const [pathname, setPathname] = useState(() => window.location.pathname);
+
+  useEffect(() => {
+    const sync = () => setPathname(window.location.pathname);
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, []);
+
+  if (isVaquinhasPath(pathname)) return <VaquinhasApp />;
   return <FinancasShell />;
 }
