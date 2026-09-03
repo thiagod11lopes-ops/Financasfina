@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --bg-deep: #030712;
   --bg-mid: #0c1929;
   --bg-card: rgba(15, 23, 42, 0.72);
@@ -62,7 +62,7 @@ textarea {
   font-size: 1rem;
 }
 
-/* Indicador Firebase — centro superior (fixo), acima do conteúdo */
+/* Indicador Firebase â€” centro superior (fixo), acima do conteÃºdo */
 .cloud-sync-badge {
   position: fixed;
   top: max(10px, env(safe-area-inset-top));
@@ -177,7 +177,7 @@ textarea {
   flex: 1;
   display: flex;
   flex-direction: column;
-  /* Espaço extra no topo para o badge da nuvem (fixo, centrado) não cobrir o branding */
+  /* EspaÃ§o extra no topo para o badge da nuvem (fixo, centrado) nÃ£o cobrir o branding */
   padding: calc(max(12px, env(safe-area-inset-top)) + 48px) 16px
     calc(var(--nav-h) + env(safe-area-inset-bottom) + 12px);
   max-width: 520px;
@@ -185,7 +185,7 @@ textarea {
   width: 100%;
 }
 
-/** Painéis da navegação inferior: só um visível; os outros ficam montados (hidden) para dados em tempo real. */
+/** PainÃ©is da navegaÃ§Ã£o inferior: sÃ³ um visÃ­vel; os outros ficam montados (hidden) para dados em tempo real. */
 .app-tab-panel[hidden] {
   display: none !important;
 }
@@ -199,7 +199,7 @@ textarea {
 
 .app-top-bar {
   display: grid;
-  grid-template-columns: 44px 1fr 44px;
+  grid-template-columns: 44px 44px 1fr 44px;
   align-items: center;
   gap: 8px;
   margin: 0 0 16px;
@@ -1075,7 +1075,7 @@ textarea {
   border-color: rgba(252, 165, 165, 0.4);
 }
 
-/* Sucesso — lançamento no saldo */
+/* Sucesso â€” lanÃ§amento no saldo */
 .movement-success-backdrop {
   position: fixed;
   inset: 0;
@@ -1896,7 +1896,7 @@ textarea {
   font-weight: 600;
 }
 
-/* Painel Início — detalhes do mês */
+/* Painel InÃ­cio â€” detalhes do mÃªs */
 .dash-stats.card {
   padding: 14px;
 }
@@ -2088,7 +2088,7 @@ textarea {
   color: var(--expense);
 }
 
-/* Modal explicativo — Início */
+/* Modal explicativo â€” InÃ­cio */
 .dash-explain-backdrop {
   position: fixed;
   inset: 0;
@@ -2297,7 +2297,7 @@ textarea {
   color: var(--text-muted);
 }
 
-/* Combobox de contas — Registrar gasto */
+/* Combobox de contas â€” Registrar gasto */
 .expense-combobox {
   position: relative;
 }
@@ -3036,7 +3036,7 @@ textarea {
   color: #c4b5fd;
 }
 
-/* Total de gastos no card conta variável (vs teto) */
+/* Total de gastos no card conta variÃ¡vel (vs teto) */
 .var-spend--blue {
   font-weight: 600;
   color: #7dd3fc;
@@ -3389,7 +3389,7 @@ textarea {
   font-size: 0.72rem;
 }
 
-/* —— Agenda familiar (fullscreen) —— */
+/* â€”â€” Agenda familiar (fullscreen) â€”â€” */
 .agenda-modal__head {
   flex-shrink: 0;
 }
@@ -3926,7 +3926,7 @@ textarea {
   gap: 8px;
 }
 
-/* Checkbox “moderno” (lembretes, objetivos, semana) */
+/* Checkbox â€œmodernoâ€ (lembretes, objetivos, semana) */
 .agenda-check.agenda-check-row--small .agenda-check__input {
   width: 20px;
   height: 20px;
@@ -4543,7 +4543,7 @@ textarea {
   }
 }
 
-/* Celular: altura previsível, toque ≥44px, título do mês sem estourar, iOS sem zoom nos campos */
+/* Celular: altura previsÃ­vel, toque â‰¥44px, tÃ­tulo do mÃªs sem estourar, iOS sem zoom nos campos */
 .agenda-modal.modal-panel--fullscreen {
   min-height: 0;
   flex: 1 1 auto;
@@ -4599,7 +4599,7 @@ textarea {
     padding-bottom: max(16px, calc(8px + env(safe-area-inset-bottom)));
   }
 
-  /* Evita zoom ao focar inputs no Safari iOS quando o texto global é menor que 16px */
+  /* Evita zoom ao focar inputs no Safari iOS quando o texto global Ã© menor que 16px */
   .agenda-modal .input,
   .agenda-modal textarea.input {
     font-size: 16px;
@@ -4632,7 +4632,7 @@ textarea {
   }
 }
 
-/* —— Alarmes de tarefas (topo do sistema) —— */
+/* â€”â€” Alarmes de tarefas (topo do sistema) â€”â€” */
 .task-alarm-stack {
   position: fixed;
   top: max(52px, calc(env(safe-area-inset-top) + 44px));
@@ -4758,7 +4758,7 @@ textarea {
   height: 18px;
 }
 
-/* —— Modal de tarefas —— */
+/* â€”â€” Modal de tarefas â€”â€” */
 .tasks-modal-backdrop {
   background: rgba(2, 6, 23, 0.72);
   backdrop-filter: blur(10px);
@@ -5493,3 +5493,4 @@ textarea {
 .tasks-shop-delete:hover {
   background: rgba(248, 113, 113, 0.12);
 }
+

@@ -1,5 +1,6 @@
-import { defineConfig } from "vite";
+﻿import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwind from "@tailwindcss/vite";
 
 /** Base pública (ex.: `/financas/` no GitHub Pages). Variável lida no `vite build`. */
 function publicBase(): string {
@@ -11,5 +12,5 @@ function publicBase(): string {
 
 export default defineConfig({
   base: publicBase(),
-  plugins: [react()],
+  plugins: [react(), tailwind()],
 });

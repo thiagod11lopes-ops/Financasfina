@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+/* Mantém o look glass/gradient sem precisar mexer no CSS principal do Finanças. */
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
