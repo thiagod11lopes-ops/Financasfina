@@ -19,6 +19,21 @@ import {
   type TabsPersist,
 } from "../dashboardTabs";
 import { notifyUsersSync, saveUserRecords, sanitizeForCloudCompare, type UserRecord } from "../users";
+import { reviveTasksFromUnknown, loadTasks, saveTasks } from "../tasks/persist";
+import type { TasksData } from "../tasks/types";
+import {
+  loadVaquinhas,
+  reviveVaquinhasFromUnknown,
+  saveVaquinhas,
+} from "../vaquinhas/storage";
+import type { VaquinhasPersisted } from "../vaquinhas/types";
+import {
+  applyShoppingListPrefsFromCloud,
+  loadShoppingListPrefsForCloud,
+  reviveShoppingListPrefsFromUnknown,
+  SHOPPING_LIST_PREFS_SYNC_EVENT,
+  type ShoppingListPrefsCloud,
+} from "../shoppingList/syncPrefs";
 import { useAuth } from "./AuthProvider";
 import { getFirebaseApp } from "./config";
 import { firestoreTimestampMs } from "./firestoreTime";
@@ -32,6 +47,9 @@ type UserDocCloudApi = {
   pushAgendaImmediate: (data: AgendaData) => void;
   scheduleDashboardTabsPush: (data: TabsPersist) => void;
   scheduleUsersPush: (records: UserRecord[]) => void;
+  scheduleTasksPush: (data: TasksData) => void;
+  scheduleVaquinhasPush: (data: VaquinhasPersisted) => void;
+  scheduleShoppingListPrefsPush: (data: ShoppingListPrefsCloud) => void;
 };
 
 const noopApi: UserDocCloudApi = {
@@ -40,6 +58,9 @@ const noopApi: UserDocCloudApi = {
   pushAgendaImmediate: () => {},
   scheduleDashboardTabsPush: () => {},
   scheduleUsersPush: () => {},
+  scheduleTasksPush: () => {},
+  scheduleVaquinhasPush: () => {},
+  scheduleShoppingListPrefsPush: () => {},
 };
 
 const UserDocCloudContext = createContext<UserDocCloudApi>(noopApi);
@@ -88,14 +109,26 @@ export function UserDocCloudProvider({ children }: { children: ReactNode }) {
   const lastTabsJsonRef = useRef("");
   const lastUsersMsRef = useRef(0);
   const lastUsersJsonRef = useRef("");
+  const lastTasksMsRef = useRef(0);
+  const lastTasksJsonRef = useRef("");
+  const lastVaquinhasMsRef = useRef(0);
+  const lastVaquinhasJsonRef = useRef("");
+  const lastShoppingMsRef = useRef(0);
+  const lastShoppingJsonRef = useRef("");
 
   const agendaPushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tabsPushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const usersPushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tasksPushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const vaquinhasPushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shoppingPushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const pendingAgendaRef = useRef<AgendaData | null>(null);
   const pendingTabsRef = useRef<TabsPersist | null>(null);
   const pendingUsersRef = useRef<UserRecord[] | null>(null);
+  const pendingTasksRef = useRef<TasksData | null>(null);
+  const pendingVaquinhasRef = useRef<VaquinhasPersisted | null>(null);
+  const pendingShoppingRef = useRef<ShoppingListPrefsCloud | null>(null);
 
   useEffect(() => {
     lastAgendaMsRef.current = 0;
@@ -104,6 +137,12 @@ export function UserDocCloudProvider({ children }: { children: ReactNode }) {
     lastTabsJsonRef.current = "";
     lastUsersMsRef.current = 0;
     lastUsersJsonRef.current = "";
+    lastTasksMsRef.current = 0;
+    lastTasksJsonRef.current = "";
+    lastVaquinhasMsRef.current = 0;
+    lastVaquinhasJsonRef.current = "";
+    lastShoppingMsRef.current = 0;
+    lastShoppingJsonRef.current = "";
   }, [fbUser?.uid]);
 
   useEffect(() => {
@@ -170,6 +209,87 @@ export function UserDocCloudProvider({ children }: { children: ReactNode }) {
             },
           });
         }
+
+        if (data.tasks == null) {
+          const local = loadTasks();
+          const json = JSON.stringify(local);
+          if (lastTasksJsonRef.current !== json) {
+            lastTasksJsonRef.current = json;
+            void setDoc(
+              ref,
+              { tasks: local, tasksUpdatedAt: serverTimestamp() },
+              { merge: true },
+            ).catch((err) => console.error("[UserDoc tasks seed]", err));
+          }
+        } else if (typeof data.tasks === "object") {
+          const t = firestoreTimestampMs(data.tasksUpdatedAt);
+          const tasks = reviveTasksFromUnknown(data.tasks);
+          const json = JSON.stringify(tasks);
+          applyRemoteField({
+            snap,
+            timeMs: t,
+            lastMsRef: lastTasksMsRef,
+            lastJsonRef: lastTasksJsonRef,
+            nextJson: json,
+            onApply: () => {
+              saveTasks(tasks);
+            },
+          });
+        }
+
+        if (data.vaquinhas == null) {
+          const local = loadVaquinhas();
+          const json = JSON.stringify(local);
+          if (lastVaquinhasJsonRef.current !== json) {
+            lastVaquinhasJsonRef.current = json;
+            void setDoc(
+              ref,
+              { vaquinhas: local, vaquinhasUpdatedAt: serverTimestamp() },
+              { merge: true },
+            ).catch((err) => console.error("[UserDoc vaquinhas seed]", err));
+          }
+        } else if (typeof data.vaquinhas === "object") {
+          const t = firestoreTimestampMs(data.vaquinhasUpdatedAt);
+          const vaquinhas = reviveVaquinhasFromUnknown(data.vaquinhas);
+          const json = JSON.stringify(vaquinhas);
+          applyRemoteField({
+            snap,
+            timeMs: t,
+            lastMsRef: lastVaquinhasMsRef,
+            lastJsonRef: lastVaquinhasJsonRef,
+            nextJson: json,
+            onApply: () => {
+              saveVaquinhas(vaquinhas);
+            },
+          });
+        }
+
+        if (data.shoppingListPrefs == null) {
+          const local = loadShoppingListPrefsForCloud();
+          const json = JSON.stringify(local);
+          if (lastShoppingJsonRef.current !== json) {
+            lastShoppingJsonRef.current = json;
+            void setDoc(
+              ref,
+              { shoppingListPrefs: local, shoppingListPrefsUpdatedAt: serverTimestamp() },
+              { merge: true },
+            ).catch((err) => console.error("[UserDoc shopping prefs seed]", err));
+          }
+        } else if (typeof data.shoppingListPrefs === "object") {
+          const t = firestoreTimestampMs(data.shoppingListPrefsUpdatedAt);
+          const prefs = reviveShoppingListPrefsFromUnknown(data.shoppingListPrefs);
+          const json = JSON.stringify(prefs);
+          applyRemoteField({
+            snap,
+            timeMs: t,
+            lastMsRef: lastShoppingMsRef,
+            lastJsonRef: lastShoppingJsonRef,
+            nextJson: json,
+            onApply: () => {
+              applyShoppingListPrefsFromCloud(prefs);
+            },
+          });
+        }
       },
       (err) => console.error("[UserDoc cloud extras]", err),
     );
@@ -229,6 +349,64 @@ export function UserDocCloudProvider({ children }: { children: ReactNode }) {
     );
   }, [fbConfigured, authReady, fbUser]);
 
+  const flushTasks = useCallback(() => {
+    if (!fbConfigured || !authReady || !fbUser) return;
+    if (tasksPushTimer.current) {
+      window.clearTimeout(tasksPushTimer.current);
+      tasksPushTimer.current = null;
+    }
+    const data = pendingTasksRef.current;
+    if (!data) return;
+    pendingTasksRef.current = null;
+    const json = JSON.stringify(data);
+    lastTasksJsonRef.current = json;
+    const app = getFirebaseApp();
+    if (!app) return;
+    const db = getFirestore(app);
+    const ref = doc(db, "userFinances", fbUser.uid);
+    void setDoc(ref, { tasks: data, tasksUpdatedAt: serverTimestamp() }, { merge: true });
+  }, [fbConfigured, authReady, fbUser]);
+
+  const flushVaquinhas = useCallback(() => {
+    if (!fbConfigured || !authReady || !fbUser) return;
+    if (vaquinhasPushTimer.current) {
+      window.clearTimeout(vaquinhasPushTimer.current);
+      vaquinhasPushTimer.current = null;
+    }
+    const data = pendingVaquinhasRef.current;
+    if (!data) return;
+    pendingVaquinhasRef.current = null;
+    const json = JSON.stringify(data);
+    lastVaquinhasJsonRef.current = json;
+    const app = getFirebaseApp();
+    if (!app) return;
+    const db = getFirestore(app);
+    const ref = doc(db, "userFinances", fbUser.uid);
+    void setDoc(ref, { vaquinhas: data, vaquinhasUpdatedAt: serverTimestamp() }, { merge: true });
+  }, [fbConfigured, authReady, fbUser]);
+
+  const flushShopping = useCallback(() => {
+    if (!fbConfigured || !authReady || !fbUser) return;
+    if (shoppingPushTimer.current) {
+      window.clearTimeout(shoppingPushTimer.current);
+      shoppingPushTimer.current = null;
+    }
+    const data = pendingShoppingRef.current;
+    if (!data) return;
+    pendingShoppingRef.current = null;
+    const json = JSON.stringify(data);
+    lastShoppingJsonRef.current = json;
+    const app = getFirebaseApp();
+    if (!app) return;
+    const db = getFirestore(app);
+    const ref = doc(db, "userFinances", fbUser.uid);
+    void setDoc(
+      ref,
+      { shoppingListPrefs: data, shoppingListPrefsUpdatedAt: serverTimestamp() },
+      { merge: true },
+    );
+  }, [fbConfigured, authReady, fbUser]);
+
   const scheduleAgendaPush = useCallback(
     (data: AgendaData) => {
       if (!fbConfigured || !authReady || !fbUser) return;
@@ -277,11 +455,62 @@ export function UserDocCloudProvider({ children }: { children: ReactNode }) {
     [fbConfigured, authReady, fbUser, flushUsers],
   );
 
+  const scheduleTasksPush = useCallback(
+    (data: TasksData) => {
+      if (!fbConfigured || !authReady || !fbUser) return;
+      pendingTasksRef.current = data;
+      if (tasksPushTimer.current) window.clearTimeout(tasksPushTimer.current);
+      tasksPushTimer.current = window.setTimeout(() => {
+        tasksPushTimer.current = null;
+        flushTasks();
+      }, 450);
+    },
+    [fbConfigured, authReady, fbUser, flushTasks],
+  );
+
+  const scheduleVaquinhasPush = useCallback(
+    (data: VaquinhasPersisted) => {
+      if (!fbConfigured || !authReady || !fbUser) return;
+      pendingVaquinhasRef.current = data;
+      if (vaquinhasPushTimer.current) window.clearTimeout(vaquinhasPushTimer.current);
+      vaquinhasPushTimer.current = window.setTimeout(() => {
+        vaquinhasPushTimer.current = null;
+        flushVaquinhas();
+      }, 450);
+    },
+    [fbConfigured, authReady, fbUser, flushVaquinhas],
+  );
+
+  const scheduleShoppingListPrefsPush = useCallback(
+    (data: ShoppingListPrefsCloud) => {
+      if (!fbConfigured || !authReady || !fbUser) return;
+      pendingShoppingRef.current = data;
+      if (shoppingPushTimer.current) window.clearTimeout(shoppingPushTimer.current);
+      shoppingPushTimer.current = window.setTimeout(() => {
+        shoppingPushTimer.current = null;
+        flushShopping();
+      }, 450);
+    },
+    [fbConfigured, authReady, fbUser, flushShopping],
+  );
+
+  useEffect(() => {
+    if (!fbConfigured || !authReady || !fbUser) return;
+    const onPrefs = () => {
+      scheduleShoppingListPrefsPush(loadShoppingListPrefsForCloud());
+    };
+    window.addEventListener(SHOPPING_LIST_PREFS_SYNC_EVENT, onPrefs);
+    return () => window.removeEventListener(SHOPPING_LIST_PREFS_SYNC_EVENT, onPrefs);
+  }, [fbConfigured, authReady, fbUser, scheduleShoppingListPrefsPush]);
+
   useEffect(
     () => () => {
       if (agendaPushTimer.current) window.clearTimeout(agendaPushTimer.current);
       if (tabsPushTimer.current) window.clearTimeout(tabsPushTimer.current);
       if (usersPushTimer.current) window.clearTimeout(usersPushTimer.current);
+      if (tasksPushTimer.current) window.clearTimeout(tasksPushTimer.current);
+      if (vaquinhasPushTimer.current) window.clearTimeout(vaquinhasPushTimer.current);
+      if (shoppingPushTimer.current) window.clearTimeout(shoppingPushTimer.current);
     },
     [],
   );
@@ -295,6 +524,9 @@ export function UserDocCloudProvider({ children }: { children: ReactNode }) {
             pushAgendaImmediate,
             scheduleDashboardTabsPush,
             scheduleUsersPush,
+            scheduleTasksPush,
+            scheduleVaquinhasPush,
+            scheduleShoppingListPrefsPush,
           }
         : noopApi,
     [
@@ -305,6 +537,9 @@ export function UserDocCloudProvider({ children }: { children: ReactNode }) {
       pushAgendaImmediate,
       scheduleDashboardTabsPush,
       scheduleUsersPush,
+      scheduleTasksPush,
+      scheduleVaquinhasPush,
+      scheduleShoppingListPrefsPush,
     ],
   );
 

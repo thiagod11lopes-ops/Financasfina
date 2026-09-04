@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useUserDocCloud } from "../firebase/userDocCloud";
 import type { TasksData } from "./types";
 import { loadTasks, newTaskId, saveTasks, TASKS_SYNC_EVENT, todayYMD } from "./persist";
 
@@ -27,11 +28,8 @@ type TasksContextValue = {
 
 const TasksContext = createContext<TasksContextValue | null>(null);
 
-function persist(next: TasksData) {
-  saveTasks(next);
-}
-
 export function TasksProvider({ children }: { children: ReactNode }) {
+  const cloud = useUserDocCloud();
   const [data, setData] = useState<TasksData>(() => loadTasks());
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -41,13 +39,17 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener(TASKS_SYNC_EVENT, sync);
   }, []);
 
-  const update = useCallback((fn: (prev: TasksData) => TasksData) => {
-    setData((prev) => {
-      const next = fn(prev);
-      persist(next);
-      return next;
-    });
-  }, []);
+  const update = useCallback(
+    (fn: (prev: TasksData) => TasksData) => {
+      setData((prev) => {
+        const next = fn(prev);
+        saveTasks(next);
+        cloud.scheduleTasksPush(next);
+        return next;
+      });
+    },
+    [cloud],
+  );
 
   const activeAlarms = useMemo(() => {
     const today = todayYMD();

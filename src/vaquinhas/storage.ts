@@ -4,6 +4,8 @@ const KEY = "vaquinhas:v4";
 const KEY_V3 = "vaquinhas:v3";
 const KEY_V2 = "vaquinhas:v2";
 
+export const VAQUINHAS_SYNC_EVENT = "financas-vaquinhas-sync";
+
 function nowYear() {
   return new Date().getFullYear();
 }
@@ -41,7 +43,7 @@ function withPeriod(v: Omit<Vaquinha, "period"> & { period?: any }): Vaquinha {
   return {
     ...v,
     period: normalizePeriod(v.period),
-    people: v.people ?? [],
+    people: Array.isArray(v.people) ? v.people : [],
   };
 }
 
@@ -86,13 +88,39 @@ function migrateFromV2(): Vaquinha[] {
   }
 }
 
+export function reviveVaquinhasFromUnknown(parsed: unknown): VaquinhasPersisted {
+  if (!parsed || typeof parsed !== "object") return { version: 4, items: [] };
+  try {
+    const p = parsed as Partial<VaquinhasPersisted>;
+    const items = Array.isArray(p.items)
+      ? p.items.map((v) =>
+          withPeriod({
+            id: String((v as Vaquinha).id ?? ""),
+            name: String((v as Vaquinha).name ?? ""),
+            totalCents: Number((v as Vaquinha).totalCents) || 0,
+            perPersonCents: Number((v as Vaquinha).perPersonCents) || 0,
+            people: Array.isArray((v as Vaquinha).people) ? (v as Vaquinha).people : [],
+            createdAtIso:
+              typeof (v as Vaquinha).createdAtIso === "string"
+                ? (v as Vaquinha).createdAtIso
+                : new Date().toISOString(),
+            period: (v as Vaquinha).period,
+          }),
+        )
+      : [];
+    return { version: 4, items: items.filter((v) => v.id && v.name) };
+  } catch {
+    return { version: 4, items: [] };
+  }
+}
+
 export function loadVaquinhas(): VaquinhasPersisted {
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as VaquinhasPersisted;
       if (parsed?.version === 4 && Array.isArray(parsed.items)) {
-        return { version: 4, items: parsed.items.map((v) => withPeriod(v)) };
+        return reviveVaquinhasFromUnknown(parsed);
       }
     }
     const fromV3 = migrateFromV3();
@@ -103,6 +131,9 @@ export function loadVaquinhas(): VaquinhasPersisted {
   }
 }
 
-export function saveVaquinhas(p: VaquinhasPersisted) {
-  localStorage.setItem(KEY, JSON.stringify(p));
+export function saveVaquinhas(p: VaquinhasPersisted, opts?: { silent?: boolean }) {
+  localStorage.setItem(KEY, JSON.stringify({ version: 4 as const, items: p.items }));
+  if (!opts?.silent) {
+    window.dispatchEvent(new Event(VAQUINHAS_SYNC_EVENT));
+  }
 }

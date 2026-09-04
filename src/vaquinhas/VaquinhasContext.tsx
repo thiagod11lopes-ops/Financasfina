@@ -1,4 +1,5 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useUserDocCloud } from "../firebase/userDocCloud";
 import type {
   PersonStatus,
   Vaquinha,
@@ -7,7 +8,7 @@ import type {
   VaquinhasPersisted,
 } from "./types";
 import { uid } from "./utils";
-import { loadVaquinhas, saveVaquinhas } from "./storage";
+import { loadVaquinhas, saveVaquinhas, VAQUINHAS_SYNC_EVENT } from "./storage";
 
 type VaquinhasCtx = {
   items: Vaquinha[];
@@ -34,12 +35,33 @@ export function useVaquinhas() {
 }
 
 export function VaquinhasProvider({ children }: { children: React.ReactNode }) {
+  const cloud = useUserDocCloud();
   const [items, setItems] = useState<Vaquinha[]>(() => loadVaquinhas().items);
+  const hydratedRef = useRef(false);
+  const applyingRemoteRef = useRef(false);
+
+  useEffect(() => {
+    const sync = () => {
+      applyingRemoteRef.current = true;
+      setItems(loadVaquinhas().items);
+    };
+    window.addEventListener(VAQUINHAS_SYNC_EVENT, sync);
+    return () => window.removeEventListener(VAQUINHAS_SYNC_EVENT, sync);
+  }, []);
 
   useEffect(() => {
     const p: VaquinhasPersisted = { version: 4, items };
-    saveVaquinhas(p);
-  }, [items]);
+    saveVaquinhas(p, { silent: true });
+    if (!hydratedRef.current) {
+      hydratedRef.current = true;
+      return;
+    }
+    if (applyingRemoteRef.current) {
+      applyingRemoteRef.current = false;
+      return;
+    }
+    cloud.scheduleVaquinhasPush(p);
+  }, [items, cloud]);
 
   const createVaquinha = useCallback((input: VaquinhaInput) => {
     const name = input.name.trim();
