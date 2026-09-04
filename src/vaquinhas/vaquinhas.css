@@ -214,15 +214,6 @@
 }
 
 .vaq-people { display:grid; gap:10px; }
-.vaq-person {
-  border:1px solid rgba(255,255,255,.12);
-  background: rgba(15,23,42,.72);
-  border-radius:18px;
-  padding:14px;
-}
-.vaq-person__head { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
-.vaq-person__name { margin:0; flex:1; font-size:1.05rem; font-weight:700; min-width:0; }
-.vaq-person__actions { display:flex; gap:6px; }
 
 .vaq-icon-btn {
   appearance:none; width:40px; height:40px; border-radius:12px;
@@ -231,25 +222,6 @@
 }
 .vaq-icon-btn--danger { color:#fda4af; }
 
-.vaq-check-group {
-  display:grid;
-  grid-template-columns: 1fr 1fr;
-  gap:8px;
-}
-.vaq-check {
-  appearance:none;
-  min-height:48px;
-  border-radius:999px;
-  border:1px solid rgba(255,255,255,.12);
-  background: rgba(2,6,23,.45);
-  color:#cbd5e1;
-  font-weight:700;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap:8px;
-  transition: all .18s ease;
-}
 .vaq-check__dot {
   width:16px; height:16px; border-radius:999px;
   border:2px solid rgba(148,163,184,.7);
@@ -351,4 +323,103 @@
   border: 1px solid rgba(52, 211, 153, 0.35);
   border-radius: 999px;
   padding: 4px 8px;
+}
+.vaq-person {
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(15,23,42,.72);
+  border-radius: 14px;
+  padding: 8px 10px;
+}
+.vaq-person__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+}
+.vaq-person__name {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vaq-person__name-input {
+  min-width: 0;
+  width: 100%;
+}
+.vaq-person__actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.vaq-person__actions .vaq-icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+}
+.vaq-check-group {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.vaq-check {
+  appearance: none;
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(2,6,23,.45);
+  color: #cbd5e1;
+  font-size: 0.75rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  white-space: nowrap;
+  transition: all .18s ease;
+}
+.vaq-check__dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 2px solid rgba(148,163,184,.7);
+  transition: all .18s ease;
+}
+.vaq-check.is-on.is-paid {
+  border-color: rgba(52,211,153,.45);
+  background: linear-gradient(135deg, rgba(16,185,129,.25), rgba(6,95,70,.35));
+  color: #bbf7d0;
+}
+.vaq-check.is-on.is-paid .vaq-check__dot {
+  border-color: #34d399;
+  box-shadow: inset 0 0 0 3px #34d399;
+}
+.vaq-check.is-on.is-pending {
+  border-color: rgba(251,113,133,.45);
+  background: linear-gradient(135deg, rgba(244,63,94,.22), rgba(127,29,29,.3));
+  color: #fecdd3;
+}
+.vaq-check.is-on.is-pending .vaq-check__dot {
+  border-color: #fb7185;
+  box-shadow: inset 0 0 0 3px #fb7185;
+}
+
+@media (max-width: 420px) {
+  .vaq-person__row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "name actions"
+      "checks checks";
+  }
+  .vaq-person__name,
+  .vaq-person__name-input { grid-area: name; }
+  .vaq-person__actions { grid-area: actions; }
+  .vaq-check-group {
+    grid-area: checks;
+    width: 100%;
+  }
+  .vaq-check { flex: 1; }
 }

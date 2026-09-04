@@ -120,10 +120,10 @@ export function VaquinhaDetail() {
 
         {vaquinha.people.map((p) => (
           <article key={p.id} className="vaq-person">
-            <div className="vaq-person__head">
+            <div className="vaq-person__row">
               {editingId === p.id ? (
                 <input
-                  className="vaq-input vaq-input--compact"
+                  className="vaq-input vaq-input--compact vaq-person__name-input"
                   value={editingName}
                   onChange={(e) => setEditingName(e.target.value)}
                   onBlur={() => {
@@ -142,6 +142,30 @@ export function VaquinhaDetail() {
               ) : (
                 <h3 className="vaq-person__name">{p.name}</h3>
               )}
+
+              <div className="vaq-check-group" role="radiogroup" aria-label={`Situação de ${p.name}`}>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={p.status === "paid"}
+                  className={`vaq-check ${p.status === "paid" ? "is-on is-paid" : ""}`}
+                  onClick={() => setPersonStatus(vaquinha.id, p.id, "paid")}
+                >
+                  <span className="vaq-check__dot" aria-hidden />
+                  Pago
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={p.status === "pending"}
+                  className={`vaq-check ${p.status === "pending" ? "is-on is-pending" : ""}`}
+                  onClick={() => setPersonStatus(vaquinha.id, p.id, "pending")}
+                >
+                  <span className="vaq-check__dot" aria-hidden />
+                  Pendente
+                </button>
+              </div>
+
               <div className="vaq-person__actions">
                 <button
                   type="button"
@@ -163,29 +187,6 @@ export function VaquinhaDetail() {
                   <TrashIcon />
                 </button>
               </div>
-            </div>
-
-            <div className="vaq-check-group" role="radiogroup" aria-label={`Situação de ${p.name}`}>
-              <button
-                type="button"
-                role="radio"
-                aria-checked={p.status === "paid"}
-                className={`vaq-check ${p.status === "paid" ? "is-on is-paid" : ""}`}
-                onClick={() => setPersonStatus(vaquinha.id, p.id, "paid")}
-              >
-                <span className="vaq-check__dot" aria-hidden />
-                Pago
-              </button>
-              <button
-                type="button"
-                role="radio"
-                aria-checked={p.status === "pending"}
-                className={`vaq-check ${p.status === "pending" ? "is-on is-pending" : ""}`}
-                onClick={() => setPersonStatus(vaquinha.id, p.id, "pending")}
-              >
-                <span className="vaq-check__dot" aria-hidden />
-                Pendente
-              </button>
             </div>
           </article>
         ))}
