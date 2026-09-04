@@ -22,6 +22,7 @@ export function VaquinhaDetail() {
   const [editingName, setEditingName] = useState("");
   const [confirmPersonId, setConfirmPersonId] = useState<string | null>(null);
   const [confirmDeleteVaquinha, setConfirmDeleteVaquinha] = useState(false);
+  const [peopleOpen, setPeopleOpen] = useState(false);
 
   const totals = useMemo(() => {
     if (!vaquinha) return { paid: 0, pending: 0 };
@@ -34,7 +35,7 @@ export function VaquinhaDetail() {
   if (!vaquinha) {
     return (
       <div className="vaq-page">
-        <p className="vaq-empty">Vaquinha nÃ£o encontrada.</p>
+        <p className="vaq-empty">Vaquinha nao encontrada.</p>
         <Link className="vaq-back" to="/vaquinhas">
           Voltar
         </Link>
@@ -42,11 +43,14 @@ export function VaquinhaDetail() {
     );
   }
 
+  const peopleCount = vaquinha.people.length;
+
   const submitPerson = (e: FormEvent) => {
     e.preventDefault();
     if (!personName.trim()) return;
     addPerson(vaquinha.id, personName);
     setPersonName("");
+    setPeopleOpen(true);
   };
 
   const confirmPerson = vaquinha.people.find((p) => p.id === confirmPersonId);
@@ -114,83 +118,106 @@ export function VaquinhaDetail() {
         </label>
       </form>
 
-      <section className="vaq-people" aria-label="Pessoas">
-        {vaquinha.people.length === 0 ? (
-          <div className="vaq-empty">Nenhuma pessoa ainda.</div>
-        ) : null}
+      <section className="vaq-people-panel" aria-label="Pessoas">
+        <button
+          type="button"
+          className={`vaq-people-toggle ${peopleOpen ? "is-open" : ""}`}
+          onClick={() => setPeopleOpen((o) => !o)}
+          aria-expanded={peopleOpen}
+          aria-controls="vaq-people-list"
+        >
+          <div className="vaq-people-toggle__left">
+            <span className="vaq-people-toggle__label">Pessoas</span>
+            <span className="vaq-people-toggle__count">{peopleCount}</span>
+          </div>
+          <span className={`vaq-people-toggle__arrow ${peopleOpen ? "is-open" : ""}`} aria-hidden>
+            <ChevronIcon />
+          </span>
+        </button>
 
-        {vaquinha.people.map((p) => (
-          <article key={p.id} className="vaq-person">
-            <div className="vaq-person__row">
-              {editingId === p.id ? (
-                <input
-                  className="vaq-input vaq-input--compact vaq-person__name-input"
-                  value={editingName}
-                  onChange={(e) => setEditingName(e.target.value)}
-                  onBlur={() => {
-                    updatePerson(vaquinha.id, p.id, { name: editingName });
-                    setEditingId(null);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      updatePerson(vaquinha.id, p.id, { name: editingName });
-                      setEditingId(null);
-                    }
-                  }}
-                  autoFocus
-                />
-              ) : (
-                <h3 className="vaq-person__name">{p.name}</h3>
-              )}
+        <div
+          id="vaq-people-list"
+          className={`vaq-people-collapse ${peopleOpen ? "is-open" : ""}`}
+        >
+          <div className="vaq-people">
+            {peopleCount === 0 ? (
+              <div className="vaq-empty">Nenhuma pessoa ainda.</div>
+            ) : null}
 
-              <div className="vaq-check-group" role="radiogroup" aria-label={`SituaÃ§Ã£o de ${p.name}`}>
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={p.status === "paid"}
-                  className={`vaq-check ${p.status === "paid" ? "is-on is-paid" : ""}`}
-                  onClick={() => setPersonStatus(vaquinha.id, p.id, "paid")}
-                >
-                  <span className="vaq-check__dot" aria-hidden />
-                  Pago
-                </button>
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={p.status === "pending"}
-                  className={`vaq-check ${p.status === "pending" ? "is-on is-pending" : ""}`}
-                  onClick={() => setPersonStatus(vaquinha.id, p.id, "pending")}
-                >
-                  <span className="vaq-check__dot" aria-hidden />
-                  Pendente
-                </button>
-              </div>
+            {vaquinha.people.map((p) => (
+              <article key={p.id} className="vaq-person">
+                <div className="vaq-person__row">
+                  {editingId === p.id ? (
+                    <input
+                      className="vaq-input vaq-input--compact vaq-person__name-input"
+                      value={editingName}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      onBlur={() => {
+                        updatePerson(vaquinha.id, p.id, { name: editingName });
+                        setEditingId(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          updatePerson(vaquinha.id, p.id, { name: editingName });
+                          setEditingId(null);
+                        }
+                      }}
+                      autoFocus
+                    />
+                  ) : (
+                    <h3 className="vaq-person__name">{p.name}</h3>
+                  )}
 
-              <div className="vaq-person__actions">
-                <button
-                  type="button"
-                  className="vaq-icon-btn"
-                  aria-label={`Editar ${p.name}`}
-                  onClick={() => {
-                    setEditingId(p.id);
-                    setEditingName(p.name);
-                  }}
-                >
-                  <EditIcon />
-                </button>
-                <button
-                  type="button"
-                  className="vaq-icon-btn vaq-icon-btn--danger"
-                  aria-label={`Excluir ${p.name}`}
-                  onClick={() => setConfirmPersonId(p.id)}
-                >
-                  <TrashIcon />
-                </button>
-              </div>
-            </div>
-          </article>
-        ))}
+                  <div className="vaq-check-group" role="radiogroup" aria-label={`Status de ${p.name}`}>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={p.status === "paid"}
+                      className={`vaq-check ${p.status === "paid" ? "is-on is-paid" : ""}`}
+                      onClick={() => setPersonStatus(vaquinha.id, p.id, "paid")}
+                    >
+                      <span className="vaq-check__dot" aria-hidden />
+                      Pago
+                    </button>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={p.status === "pending"}
+                      className={`vaq-check ${p.status === "pending" ? "is-on is-pending" : ""}`}
+                      onClick={() => setPersonStatus(vaquinha.id, p.id, "pending")}
+                    >
+                      <span className="vaq-check__dot" aria-hidden />
+                      Pendente
+                    </button>
+                  </div>
+
+                  <div className="vaq-person__actions">
+                    <button
+                      type="button"
+                      className="vaq-icon-btn"
+                      aria-label={`Editar ${p.name}`}
+                      onClick={() => {
+                        setEditingId(p.id);
+                        setEditingName(p.name);
+                      }}
+                    >
+                      <EditIcon />
+                    </button>
+                    <button
+                      type="button"
+                      className="vaq-icon-btn vaq-icon-btn--danger"
+                      aria-label={`Excluir ${p.name}`}
+                      onClick={() => setConfirmPersonId(p.id)}
+                    >
+                      <TrashIcon />
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
       </section>
 
       <ConfirmModal
@@ -220,6 +247,20 @@ export function VaquinhaDetail() {
         }}
       />
     </div>
+  );
+}
+
+function ChevronIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M6 9l6 6 6-6"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
