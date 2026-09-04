@@ -10,8 +10,8 @@ export type PeriodKind = "range" | "monthly" | "yearly";
 
 export type VaquinhaPeriod =
   | { kind: "range"; startDateIso: string; endDateIso: string }
-  | { kind: "monthly" }
-  | { kind: "yearly" };
+  | { kind: "monthly"; year: number; month: number }
+  | { kind: "yearly"; year: number };
 
 export type Vaquinha = {
   id: string;

@@ -39,10 +39,33 @@ function formatDateBr(iso: string) {
   return `${d}/${m}/${y}`;
 }
 
+const MONTH_LABELS = [
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
+] as const;
+
+export function monthLabel(month: number) {
+  return MONTH_LABELS[Math.min(11, Math.max(0, month - 1))] ?? String(month);
+}
+
 export function formatPeriodLabel(period: VaquinhaPeriod | undefined) {
   if (!period) return "Sem período";
-  if (period.kind === "monthly") return "Mensal";
-  if (period.kind === "yearly") return "Anual";
+  if (period.kind === "monthly") {
+    return `Mensal · ${monthLabel(period.month)}/${period.year}`;
+  }
+  if (period.kind === "yearly") {
+    return `Anual · ${period.year}`;
+  }
   return `${formatDateBr(period.startDateIso)} → ${formatDateBr(period.endDateIso)}`;
 }
 
@@ -52,4 +75,18 @@ export function todayIsoDate() {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+export function currentYear() {
+  return new Date().getFullYear();
+}
+
+export function currentMonth() {
+  return new Date().getMonth() + 1;
+}
+
+export function yearOptions(center = currentYear(), span = 6) {
+  const years: number[] = [];
+  for (let y = center - 2; y <= center + span; y += 1) years.push(y);
+  return years;
 }

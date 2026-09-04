@@ -558,3 +558,21 @@
   display: grid;
   gap: 10px;
 }
+
+.vaq-period__dates--split {
+  grid-template-columns: 1.3fr 1fr;
+}
+@media (max-width: 420px) {
+  .vaq-period__dates--split {
+    grid-template-columns: 1fr;
+  }
+}
+select.vaq-input {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, #94a3b8 50%),
+    linear-gradient(135deg, #94a3b8 50%, transparent 50%);
+  background-position: calc(100% - 18px) calc(50% - 3px), calc(100% - 12px) calc(50% - 3px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  padding-right: 34px;
+}

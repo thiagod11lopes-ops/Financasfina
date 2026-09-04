@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { PeriodKind, Vaquinha, VaquinhaInput, VaquinhaPeriod } from "../types";
-import { parseMoneyBRLToCents, todayIsoDate } from "../utils";
+import {
+  currentMonth,
+  currentYear,
+  monthLabel,
+  parseMoneyBRLToCents,
+  todayIsoDate,
+  yearOptions,
+} from "../utils";
 
 type Props = {
   open: boolean;
@@ -17,6 +24,10 @@ export function VaquinhaFormModal({ open, mode, initial, onClose, onSubmit }: Pr
   const [periodKind, setPeriodKind] = useState<PeriodKind>("monthly");
   const [startDate, setStartDate] = useState(todayIsoDate());
   const [endDate, setEndDate] = useState(todayIsoDate());
+  const [month, setMonth] = useState(currentMonth());
+  const [year, setYear] = useState(currentYear());
+
+  const years = useMemo(() => yearOptions(currentYear()), []);
 
   useEffect(() => {
     if (!open) return;
@@ -28,7 +39,16 @@ export function VaquinhaFormModal({ open, mode, initial, onClose, onSubmit }: Pr
       if (initial.period.kind === "range") {
         setStartDate(initial.period.startDateIso);
         setEndDate(initial.period.endDateIso);
+        setMonth(currentMonth());
+        setYear(currentYear());
+      } else if (initial.period.kind === "monthly") {
+        setMonth(initial.period.month);
+        setYear(initial.period.year);
+        setStartDate(todayIsoDate());
+        setEndDate(todayIsoDate());
       } else {
+        setYear(initial.period.year);
+        setMonth(currentMonth());
         setStartDate(todayIsoDate());
         setEndDate(todayIsoDate());
       }
@@ -40,14 +60,22 @@ export function VaquinhaFormModal({ open, mode, initial, onClose, onSubmit }: Pr
     setPeriodKind("monthly");
     setStartDate(todayIsoDate());
     setEndDate(todayIsoDate());
+    setMonth(currentMonth());
+    setYear(currentYear());
   }, [open, mode, initial]);
 
   const period: VaquinhaPeriod | null = useMemo(() => {
-    if (periodKind === "monthly") return { kind: "monthly" };
-    if (periodKind === "yearly") return { kind: "yearly" };
+    if (periodKind === "monthly") {
+      if (month < 1 || month > 12 || !year) return null;
+      return { kind: "monthly", year, month };
+    }
+    if (periodKind === "yearly") {
+      if (!year) return null;
+      return { kind: "yearly", year };
+    }
     if (!startDate || !endDate || endDate < startDate) return null;
     return { kind: "range", startDateIso: startDate, endDateIso: endDate };
-  }, [periodKind, startDate, endDate]);
+  }, [periodKind, startDate, endDate, month, year]);
 
   if (!open) return null;
 
@@ -137,7 +165,11 @@ export function VaquinhaFormModal({ open, mode, initial, onClose, onSubmit }: Pr
                 role="radio"
                 aria-checked={periodKind === "monthly"}
                 className={`vaq-period__chip ${periodKind === "monthly" ? "is-on" : ""}`}
-                onClick={() => setPeriodKind("monthly")}
+                onClick={() => {
+                  setPeriodKind("monthly");
+                  setMonth(currentMonth());
+                  setYear(currentYear());
+                }}
               >
                 Mensal
               </button>
@@ -146,7 +178,10 @@ export function VaquinhaFormModal({ open, mode, initial, onClose, onSubmit }: Pr
                 role="radio"
                 aria-checked={periodKind === "yearly"}
                 className={`vaq-period__chip ${periodKind === "yearly" ? "is-on" : ""}`}
-                onClick={() => setPeriodKind("yearly")}
+                onClick={() => {
+                  setPeriodKind("yearly");
+                  setYear(currentYear());
+                }}
               >
                 Anual
               </button>
@@ -174,6 +209,56 @@ export function VaquinhaFormModal({ open, mode, initial, onClose, onSubmit }: Pr
                   />
                 </label>
               </div>
+            ) : null}
+
+            {periodKind === "monthly" ? (
+              <div className="vaq-period__dates vaq-period__dates--split">
+                <label className="vaq-field">
+                  <span>Mês</span>
+                  <select
+                    className="vaq-input"
+                    value={month}
+                    onChange={(e) => setMonth(Number(e.target.value))}
+                  >
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                      <option key={m} value={m}>
+                        {monthLabel(m)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="vaq-field">
+                  <span>Ano</span>
+                  <select
+                    className="vaq-input"
+                    value={year}
+                    onChange={(e) => setYear(Number(e.target.value))}
+                  >
+                    {years.map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            ) : null}
+
+            {periodKind === "yearly" ? (
+              <label className="vaq-field">
+                <span>Ano</span>
+                <select
+                  className="vaq-input"
+                  value={year}
+                  onChange={(e) => setYear(Number(e.target.value))}
+                >
+                  {years.map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              </label>
             ) : null}
           </fieldset>
 

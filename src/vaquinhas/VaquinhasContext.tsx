@@ -48,6 +48,12 @@ export function VaquinhasProvider({ children }: { children: React.ReactNode }) {
       if (!input.period.startDateIso || !input.period.endDateIso) return null;
       if (input.period.endDateIso < input.period.startDateIso) return null;
     }
+    if (input.period.kind === "monthly") {
+      if (!input.period.year || input.period.month < 1 || input.period.month > 12) return null;
+    }
+    if (input.period.kind === "yearly") {
+      if (!input.period.year) return null;
+    }
     const id = uid("vaq");
     setItems((prev) => [
       ...prev,
