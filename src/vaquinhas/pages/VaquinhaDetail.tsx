@@ -23,6 +23,7 @@ export function VaquinhaDetail() {
   const [confirmPersonId, setConfirmPersonId] = useState<string | null>(null);
   const [confirmDeleteVaquinha, setConfirmDeleteVaquinha] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
+  const [addPersonOpen, setAddPersonOpen] = useState(false);
 
   const totals = useMemo(() => {
     if (!vaquinha) return { paid: 0, pending: 0 };
@@ -50,6 +51,7 @@ export function VaquinhaDetail() {
     if (!personName.trim()) return;
     addPerson(vaquinha.id, personName);
     setPersonName("");
+    setAddPersonOpen(false);
     setPeopleOpen(true);
   };
 
@@ -100,40 +102,55 @@ export function VaquinhaDetail() {
         </div>
       </section>
 
-      <form className="vaq-create vaq-create--inline" onSubmit={submitPerson}>
-        <label className="vaq-field">
-          <span>Adicionar pessoa</span>
-          <div className="vaq-inline-row">
-            <input
-              className="vaq-input"
-              value={personName}
-              onChange={(e) => setPersonName(e.target.value)}
-              placeholder="Nome"
-              autoComplete="off"
-            />
-            <button type="submit" className="vaq-btn vaq-btn--mini" disabled={!personName.trim()}>
-              +
-            </button>
-          </div>
-        </label>
-      </form>
-
       <section className="vaq-people-panel" aria-label="Pessoas">
-        <button
-          type="button"
-          className={`vaq-people-toggle ${peopleOpen ? "is-open" : ""}`}
-          onClick={() => setPeopleOpen((o) => !o)}
-          aria-expanded={peopleOpen}
-          aria-controls="vaq-people-list"
-        >
-          <div className="vaq-people-toggle__left">
-            <span className="vaq-people-toggle__label">Pessoas</span>
-            <span className="vaq-people-toggle__count">{peopleCount}</span>
-          </div>
-          <span className={`vaq-people-toggle__arrow ${peopleOpen ? "is-open" : ""}`} aria-hidden>
-            <ChevronIcon />
-          </span>
-        </button>
+        <div className={`vaq-people-toggle ${peopleOpen ? "is-open" : ""}`}>
+          <button
+            type="button"
+            className="vaq-people-toggle__main"
+            onClick={() => setPeopleOpen((o) => !o)}
+            aria-expanded={peopleOpen}
+            aria-controls="vaq-people-list"
+          >
+            <div className="vaq-people-toggle__left">
+              <span className="vaq-people-toggle__label">Pessoas</span>
+              <span className="vaq-people-toggle__count">{peopleCount}</span>
+            </div>
+            <span className={`vaq-people-toggle__arrow ${peopleOpen ? "is-open" : ""}`} aria-hidden>
+              <ChevronIcon />
+            </span>
+          </button>
+          <button
+            type="button"
+            className={`vaq-people-add-btn ${addPersonOpen ? "is-on" : ""}`}
+            onClick={() => setAddPersonOpen((o) => !o)}
+            aria-label="Adicionar pessoa"
+            aria-expanded={addPersonOpen}
+            title="Adicionar pessoa"
+          >
+            <span aria-hidden>+</span>
+          </button>
+        </div>
+
+        {addPersonOpen ? (
+          <form className="vaq-create vaq-create--inline vaq-create--people" onSubmit={submitPerson}>
+            <label className="vaq-field">
+              <span>Adicionar pessoa</span>
+              <div className="vaq-inline-row">
+                <input
+                  className="vaq-input"
+                  value={personName}
+                  onChange={(e) => setPersonName(e.target.value)}
+                  placeholder="Nome"
+                  autoComplete="off"
+                  autoFocus
+                />
+                <button type="submit" className="vaq-btn vaq-btn--mini" disabled={!personName.trim()}>
+                  OK
+                </button>
+              </div>
+            </label>
+          </form>
+        ) : null}
 
         <div
           id="vaq-people-list"

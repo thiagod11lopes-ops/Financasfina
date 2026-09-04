@@ -610,19 +610,14 @@ select.vaq-input {
   margin-top: 4px;
 }
 .vaq-people-toggle {
-  appearance: none;
-  width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   min-height: 56px;
-  padding: 12px 14px;
+  padding: 8px 8px 8px 14px;
   border-radius: 18px;
   border: 1px solid rgba(255,255,255,.14);
-  background:
-    linear-gradient(135deg, rgba(15,23,42,.92), rgba(8,47,73,.55));
-  color: #e2e8f0;
+  background: linear-gradient(135deg, rgba(15,23,42,.92), rgba(8,47,73,.55));
   box-shadow: 0 10px 28px rgba(14,165,233,.12);
   position: relative;
   overflow: hidden;
@@ -695,4 +690,42 @@ select.vaq-input {
 }
 .vaq-people-collapse.is-open[hidden] {
   display: grid;
+}
+
+.vaq-people-toggle__main {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  text-align: left;
+}
+.vaq-people-add-btn {
+  appearance: none;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: #0f172a;
+  font-size: 1.5rem;
+  font-weight: 300;
+  line-height: 1;
+  background: linear-gradient(135deg, #a78bfa, #22d3ee 55%, #67e8f9);
+  box-shadow: 0 6px 16px rgba(34,211,238,.25);
+}
+.vaq-people-add-btn.is-on {
+  box-shadow: 0 0 0 3px rgba(34,211,238,.25), 0 6px 16px rgba(34,211,238,.25);
+}
+.vaq-create--people {
+  margin-top: 10px;
+  margin-bottom: 0;
 }
