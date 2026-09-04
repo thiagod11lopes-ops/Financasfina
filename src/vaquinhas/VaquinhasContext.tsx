@@ -56,7 +56,6 @@ export function VaquinhasProvider({ children }: { children: React.ReactNode }) {
     }
     const id = uid("vaq");
     setItems((prev) => [
-      ...prev,
       {
         id,
         name,
@@ -66,6 +65,7 @@ export function VaquinhasProvider({ children }: { children: React.ReactNode }) {
         people: [],
         createdAtIso: new Date().toISOString(),
       },
+      ...prev,
     ]);
     return id;
   }, []);

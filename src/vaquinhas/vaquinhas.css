@@ -23,7 +23,7 @@
   z-index: 1;
   width: min(720px, 100%);
   margin: 0 auto;
-  padding: max(12px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) calc(96px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+  padding: max(12px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
   box-sizing: border-box;
 }
 
@@ -575,4 +575,33 @@ select.vaq-input {
   background-size: 6px 6px, 6px 6px;
   background-repeat: no-repeat;
   padding-right: 34px;
+}
+
+.vaq-top__right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  justify-self: end;
+}
+.vaq-add-top {
+  appearance: none;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #a78bfa, #22d3ee 55%, #67e8f9);
+  box-shadow: 0 8px 20px rgba(34, 211, 238, 0.28);
+  color: #0f172a;
+}
+.vaq-add-top__plus {
+  font-size: 1.7rem;
+  font-weight: 300;
+  line-height: 1;
+  margin-top: -1px;
+}
+.vaq-add-top:active {
+  transform: scale(0.96);
 }

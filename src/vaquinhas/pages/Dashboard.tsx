@@ -27,6 +27,9 @@ export function Dashboard() {
       if (isVaquinhaFinished(v)) finishedList.push(v);
       else activeList.push(v);
     }
+    const byNewest = (a: Vaquinha, b: Vaquinha) => (a.createdAtIso < b.createdAtIso ? 1 : -1);
+    activeList.sort(byNewest);
+    finishedList.sort(byNewest);
     return { active: activeList, finished: finishedList };
   }, [items]);
 
@@ -44,20 +47,31 @@ export function Dashboard() {
           Voltar
         </button>
         <h1 className="vaq-title">Vaquinhas</h1>
-        {finished.length > 0 ? (
+        <div className="vaq-top__right">
+          {finished.length > 0 ? (
+            <button
+              type="button"
+              className="vaq-icon-btn vaq-finished-btn"
+              onClick={() => setFinishedOpen(true)}
+              aria-label={`Ver ${finished.length} vaquinhas finalizadas`}
+              title="Finalizadas"
+            >
+              <ArchiveIcon />
+              <span className="vaq-finished-btn__badge">{finished.length}</span>
+            </button>
+          ) : null}
           <button
             type="button"
-            className="vaq-icon-btn vaq-finished-btn"
-            onClick={() => setFinishedOpen(true)}
-            aria-label={`Ver ${finished.length} vaquinhas finalizadas`}
-            title="Finalizadas"
+            className="vaq-add-top"
+            onClick={() => setCreateOpen(true)}
+            aria-label="Adicionar nova vaquinha"
+            title="Nova vaquinha"
           >
-            <ArchiveIcon />
-            <span className="vaq-finished-btn__badge">{finished.length}</span>
+            <span className="vaq-add-top__plus" aria-hidden>
+              +
+            </span>
           </button>
-        ) : (
-          <span className="vaq-top__spacer" aria-hidden />
-        )}
+        </div>
       </div>
 
       {active.length === 0 ? (
@@ -131,20 +145,7 @@ export function Dashboard() {
         </div>
       )}
 
-      <button
-        type="button"
-        className="vaq-fab"
-        onClick={() => setCreateOpen(true)}
-        aria-label="Adicionar nova vaquinha"
-        title="Nova vaquinha"
-      >
-        <span className="vaq-fab__ring" aria-hidden />
-        <span className="vaq-fab__plus" aria-hidden>
-          +
-        </span>
-      </button>
-
-      <VaquinhaFormModal
+<VaquinhaFormModal
         open={createOpen}
         mode="create"
         onClose={() => setCreateOpen(false)}
