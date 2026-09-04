@@ -19,10 +19,9 @@ import {
   type TabsPersist,
 } from "../dashboardTabs";
 import { notifyUsersSync, saveUserRecords, sanitizeForCloudCompare, type UserRecord } from "../users";
-import { reviveTasksFromUnknown, loadTasks, saveTasks } from "../tasks/persist";
+import { reviveTasksFromUnknown, saveTasks } from "../tasks/persist";
 import type { TasksData } from "../tasks/types";
 import {
-  loadVaquinhas,
   reviveVaquinhasFromUnknown,
   saveVaquinhas,
 } from "../vaquinhas/storage";
@@ -210,18 +209,7 @@ export function UserDocCloudProvider({ children }: { children: ReactNode }) {
           });
         }
 
-        if (data.tasks == null) {
-          const local = loadTasks();
-          const json = JSON.stringify(local);
-          if (lastTasksJsonRef.current !== json) {
-            lastTasksJsonRef.current = json;
-            void setDoc(
-              ref,
-              { tasks: local, tasksUpdatedAt: serverTimestamp() },
-              { merge: true },
-            ).catch((err) => console.error("[UserDoc tasks seed]", err));
-          }
-        } else if (typeof data.tasks === "object") {
+        if (data.tasks != null && typeof data.tasks === "object") {
           const t = firestoreTimestampMs(data.tasksUpdatedAt);
           const tasks = reviveTasksFromUnknown(data.tasks);
           const json = JSON.stringify(tasks);
@@ -237,18 +225,7 @@ export function UserDocCloudProvider({ children }: { children: ReactNode }) {
           });
         }
 
-        if (data.vaquinhas == null) {
-          const local = loadVaquinhas();
-          const json = JSON.stringify(local);
-          if (lastVaquinhasJsonRef.current !== json) {
-            lastVaquinhasJsonRef.current = json;
-            void setDoc(
-              ref,
-              { vaquinhas: local, vaquinhasUpdatedAt: serverTimestamp() },
-              { merge: true },
-            ).catch((err) => console.error("[UserDoc vaquinhas seed]", err));
-          }
-        } else if (typeof data.vaquinhas === "object") {
+        if (data.vaquinhas != null && typeof data.vaquinhas === "object") {
           const t = firestoreTimestampMs(data.vaquinhasUpdatedAt);
           const vaquinhas = reviveVaquinhasFromUnknown(data.vaquinhas);
           const json = JSON.stringify(vaquinhas);
@@ -264,18 +241,7 @@ export function UserDocCloudProvider({ children }: { children: ReactNode }) {
           });
         }
 
-        if (data.shoppingListPrefs == null) {
-          const local = loadShoppingListPrefsForCloud();
-          const json = JSON.stringify(local);
-          if (lastShoppingJsonRef.current !== json) {
-            lastShoppingJsonRef.current = json;
-            void setDoc(
-              ref,
-              { shoppingListPrefs: local, shoppingListPrefsUpdatedAt: serverTimestamp() },
-              { merge: true },
-            ).catch((err) => console.error("[UserDoc shopping prefs seed]", err));
-          }
-        } else if (typeof data.shoppingListPrefs === "object") {
+        if (data.shoppingListPrefs != null && typeof data.shoppingListPrefs === "object") {
           const t = firestoreTimestampMs(data.shoppingListPrefsUpdatedAt);
           const prefs = reviveShoppingListPrefsFromUnknown(data.shoppingListPrefs);
           const json = JSON.stringify(prefs);

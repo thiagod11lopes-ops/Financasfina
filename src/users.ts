@@ -1,3 +1,5 @@
+import { isCloudSessionActive } from "./storage/cloudSession";
+
 const USERS_KEY = "financas-users-v1";
 export const USERS_SYNC_EVENT = "financas-users-sync";
 export const USERS_ALL_OPTION = "Todos";
@@ -21,6 +23,8 @@ export type UserRecord = {
 };
 
 type StoredV2 = { version: 2; users: UserRecord[] };
+
+let memoryUsers: UserRecord[] | null = null;
 
 function normalizeHex(c: string | undefined | null): string | undefined {
   if (c == null || typeof c !== "string") return undefined;
@@ -98,6 +102,8 @@ function isStoredV2(x: unknown): x is StoredV2 {
 }
 
 function persistRecords(users: UserRecord[]): void {
+  memoryUsers = users;
+  if (isCloudSessionActive()) return;
   const payload: StoredV2 = { version: 2, users };
   localStorage.setItem(USERS_KEY, JSON.stringify(payload));
 }
@@ -108,6 +114,9 @@ export function saveUserRecords(users: UserRecord[]): void {
 }
 
 export function loadUserRecords(): UserRecord[] {
+  if (isCloudSessionActive()) {
+    return memoryUsers ? sanitizeV2Users(memoryUsers) : [{ name: USERS_ALL_OPTION }];
+  }
   try {
     const raw = localStorage.getItem(USERS_KEY);
     if (!raw) return [{ name: USERS_ALL_OPTION }];
@@ -124,6 +133,10 @@ export function loadUserRecords(): UserRecord[] {
     /* ignore */
   }
   return [{ name: USERS_ALL_OPTION }];
+}
+
+export function clearUsersMemory(): void {
+  memoryUsers = null;
 }
 
 export function loadUsers(): string[] {

@@ -23,7 +23,9 @@ import {
   markGoogleRedirectPending,
 } from "./loginRedirectState";
 import { activateShoppingListSyncForUser } from "../shoppingList/syncPrefs";
+import { syncAccountMetaToFirestore } from "./syncAccountMeta";
 import { isInstalledPwa, PWA_IOS_LOGIN_MESSAGE } from "../utils/pwa";
+import { clearLocalAppData, setCloudSessionActive } from "../storage/cloudSession";
 
 const AUTH_INIT_TIMEOUT_MS = 12_000;
 
@@ -166,12 +168,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const unsub = onAuthStateChanged(auth, (u) => {
       if (cancelled) return;
+      if (u) {
+        setCloudSessionActive(true);
+        clearLocalAppData();
+      } else {
+        setCloudSessionActive(false);
+        clearLocalAppData();
+      }
       setUser(u);
       setReady(true);
       if (u) {
         clearGoogleRedirectPending();
         sawAuthAfterRedirect = true;
-        if (u.email) void activateShoppingListSyncForUser(u.email, u.uid);
+        if (u.email) {
+          void activateShoppingListSyncForUser(u.email, u.uid);
+          void syncAccountMetaToFirestore(u.uid, u.email).catch((e) =>
+            console.warn("[Finanças] syncAccountMeta", e),
+          );
+        }
       } else if (redirectChecked) {
         sawAuthAfterRedirect = true;
       }

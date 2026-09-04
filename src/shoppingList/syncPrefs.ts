@@ -1,9 +1,14 @@
+import { isCloudSessionActive } from "../storage/cloudSession";
+
 /** Chave partilhada com a app Lista de Compras (mesma origem no GitHub Pages). */
 export const SHOPPING_LIST_SYNC_PREFS_KEY = "lista-compras:syncPrefs";
 export const SHOPPING_LIST_ACCOUNT_EMAIL_KEY = "lista-compras:financasAccountEmail";
 export const SHOPPING_LIST_PREFS_SYNC_EVENT = "financas-shopping-list-prefs-sync";
 
 export const SHOPPING_LIST_URL = "https://thiagod11lopes-ops.github.io/Lista-de-Compras/";
+
+let memoryPrefs: ShoppingListSyncPrefs | null = null;
+let memoryEmail: string | null = null;
 
 /** Mesmo algoritmo que `hashSalaSync` em Lista-de-Compras (`nome|senha` → SHA-256 hex). */
 export async function hashShoppingListRoom(email: string, secret: string): Promise<string> {
@@ -32,29 +37,36 @@ export function saveShoppingListSyncPrefs(
   opts?: { silent?: boolean },
 ): void {
   if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(SHOPPING_LIST_SYNC_PREFS_KEY, JSON.stringify(prefs));
-    if (!opts?.silent) {
-      window.dispatchEvent(new Event(SHOPPING_LIST_PREFS_SYNC_EVENT));
+  memoryPrefs = prefs;
+  if (!isCloudSessionActive()) {
+    try {
+      window.localStorage.setItem(SHOPPING_LIST_SYNC_PREFS_KEY, JSON.stringify(prefs));
+    } catch {
+      /* quota / modo privado */
     }
-  } catch {
-    /* quota / modo privado */
+  }
+  if (!opts?.silent) {
+    window.dispatchEvent(new Event(SHOPPING_LIST_PREFS_SYNC_EVENT));
   }
 }
 
 export function saveShoppingListAccountEmail(email: string, opts?: { silent?: boolean }): void {
   if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(SHOPPING_LIST_ACCOUNT_EMAIL_KEY, email.trim());
-    if (!opts?.silent) {
-      window.dispatchEvent(new Event(SHOPPING_LIST_PREFS_SYNC_EVENT));
+  memoryEmail = email.trim();
+  if (!isCloudSessionActive()) {
+    try {
+      window.localStorage.setItem(SHOPPING_LIST_ACCOUNT_EMAIL_KEY, email.trim());
+    } catch {
+      /* quota / modo privado */
     }
-  } catch {
-    /* quota / modo privado */
+  }
+  if (!opts?.silent) {
+    window.dispatchEvent(new Event(SHOPPING_LIST_PREFS_SYNC_EVENT));
   }
 }
 
 export function readShoppingListAccountEmail(): string | null {
+  if (isCloudSessionActive()) return memoryEmail;
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(SHOPPING_LIST_ACCOUNT_EMAIL_KEY);
@@ -66,6 +78,10 @@ export function readShoppingListAccountEmail(): string | null {
 }
 
 export function readShoppingListSyncPrefs(): ShoppingListSyncPrefs | null {
+  if (isCloudSessionActive()) {
+    if (!memoryPrefs?.ativo || !memoryPrefs.roomHash) return null;
+    return memoryPrefs;
+  }
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(SHOPPING_LIST_SYNC_PREFS_KEY);

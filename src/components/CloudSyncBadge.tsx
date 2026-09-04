@@ -35,7 +35,7 @@ export function CloudSyncBadge() {
     return (
       <div
         className="cloud-sync-badge cloud-sync-badge--sync cloud-sync-badge--with-email"
-        title="Sincronizado com o Firebase. Finanças, resumo, agenda e utilizadores seguem a última versão na nuvem (cópia local ao sair da conta)."
+        title="Dados só no Firebase. Com a mesma conta Google, todos os aparelhos veem a mesma versão na nuvem."
       >
         <div className="cloud-sync-badge__row">
           <span className="cloud-sync-badge__dot" aria-hidden />

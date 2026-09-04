@@ -1,5 +1,6 @@
 import type { AgendaData, AgendaFamilyTask } from "./types";
 import { USERS_ALL_OPTION } from "../users";
+import { isCloudSessionActive } from "../storage/cloudSession";
 
 const STORAGE_KEY = "financas-agenda-v1";
 
@@ -10,6 +11,8 @@ const defaultData = (): AgendaData => ({
   goals: [],
   familyWeekTasks: [],
 });
+
+let memoryAgenda: AgendaData | null = null;
 
 function newId(): string {
   return crypto.randomUUID();
@@ -72,6 +75,9 @@ export function reviveAgendaFromUnknown(parsed: unknown): AgendaData {
 }
 
 export function loadAgenda(): AgendaData {
+  if (isCloudSessionActive()) {
+    return memoryAgenda ? reviveAgendaFromUnknown(memoryAgenda) : defaultData();
+  }
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return defaultData();
@@ -82,11 +88,17 @@ export function loadAgenda(): AgendaData {
 }
 
 export function saveAgenda(data: AgendaData): void {
+  memoryAgenda = reviveAgendaFromUnknown(data);
+  if (isCloudSessionActive()) return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(memoryAgenda));
   } catch {
     /* ignore quota */
   }
+}
+
+export function clearAgendaMemory(): void {
+  memoryAgenda = null;
 }
 
 export { newId };

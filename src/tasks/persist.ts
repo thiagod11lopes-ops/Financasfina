@@ -1,4 +1,5 @@
 import type { ShoppingPriorityItem, TaskItem, TasksData } from "./types";
+import { isCloudSessionActive } from "../storage/cloudSession";
 
 export const TASKS_STORAGE_KEY = "financas-tasks-v1";
 export const TASKS_SYNC_EVENT = "financas-tasks-sync";
@@ -6,6 +7,8 @@ export const TASKS_SYNC_EVENT = "financas-tasks-sync";
 export function newTaskId(): string {
   return crypto.randomUUID();
 }
+
+let memoryTasks: TasksData | null = null;
 
 const defaultData = (): TasksData => ({
   version: 1,
@@ -62,6 +65,9 @@ export function reviveTasksFromUnknown(parsed: unknown): TasksData {
 }
 
 export function loadTasks(): TasksData {
+  if (isCloudSessionActive()) {
+    return memoryTasks ? reviveTasksFromUnknown(memoryTasks) : defaultData();
+  }
   try {
     const raw = localStorage.getItem(TASKS_STORAGE_KEY);
     if (!raw) return defaultData();
@@ -72,12 +78,19 @@ export function loadTasks(): TasksData {
 }
 
 export function saveTasks(data: TasksData): void {
-  try {
-    localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(data));
-    window.dispatchEvent(new Event(TASKS_SYNC_EVENT));
-  } catch {
-    /* quota */
+  memoryTasks = reviveTasksFromUnknown(data);
+  if (!isCloudSessionActive()) {
+    try {
+      localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(memoryTasks));
+    } catch {
+      /* quota */
+    }
   }
+  window.dispatchEvent(new Event(TASKS_SYNC_EVENT));
+}
+
+export function clearTasksMemory(): void {
+  memoryTasks = null;
 }
 
 export function todayYMD(): string {

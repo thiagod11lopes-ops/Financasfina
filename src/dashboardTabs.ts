@@ -1,4 +1,5 @@
 import { monthKey } from "./utils/format";
+import { isCloudSessionActive } from "./storage/cloudSession";
 
 export const DASH_TABS_KEY = "financas-dashboard-month-tabs-v1";
 
@@ -10,6 +11,8 @@ export type TabsPersist = {
   tabs: string[];
   active: string;
 };
+
+let memoryTabs: TabsPersist | null = null;
 
 export function reviveDashboardTabsFromUnknown(raw: unknown): TabsPersist {
   if (!raw || typeof raw !== "object") {
@@ -29,6 +32,9 @@ export function reviveDashboardTabsFromUnknown(raw: unknown): TabsPersist {
 }
 
 export function loadDashboardTabs(): TabsPersist {
+  if (isCloudSessionActive()) {
+    return memoryTabs ? reviveDashboardTabsFromUnknown(memoryTabs) : { tabs: [LEGACY_DEFAULT_TAB], active: LEGACY_DEFAULT_TAB };
+  }
   try {
     const raw = localStorage.getItem(DASH_TABS_KEY);
     if (!raw) return { tabs: [LEGACY_DEFAULT_TAB], active: LEGACY_DEFAULT_TAB };
@@ -39,7 +45,14 @@ export function loadDashboardTabs(): TabsPersist {
 }
 
 export function saveDashboardTabs(data: TabsPersist): void {
-  localStorage.setItem(DASH_TABS_KEY, JSON.stringify(data));
+  memoryTabs = reviveDashboardTabsFromUnknown(data);
+  if (!isCloudSessionActive()) {
+    localStorage.setItem(DASH_TABS_KEY, JSON.stringify(memoryTabs));
+  }
+}
+
+export function clearDashboardTabsMemory(): void {
+  memoryTabs = null;
 }
 
 /** Remove um mês da lista de abas do resumo; garante ao menos uma aba. */

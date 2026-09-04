@@ -1,10 +1,13 @@
 import type { Vaquinha, VaquinhaPeriod, VaquinhasPersisted } from "./types";
+import { isCloudSessionActive } from "../storage/cloudSession";
 
 const KEY = "vaquinhas:v4";
 const KEY_V3 = "vaquinhas:v3";
 const KEY_V2 = "vaquinhas:v2";
 
 export const VAQUINHAS_SYNC_EVENT = "financas-vaquinhas-sync";
+
+let memoryVaquinhas: VaquinhasPersisted | null = null;
 
 function nowYear() {
   return new Date().getFullYear();
@@ -115,6 +118,11 @@ export function reviveVaquinhasFromUnknown(parsed: unknown): VaquinhasPersisted 
 }
 
 export function loadVaquinhas(): VaquinhasPersisted {
+  if (isCloudSessionActive()) {
+    return memoryVaquinhas
+      ? reviveVaquinhasFromUnknown(memoryVaquinhas)
+      : { version: 4, items: [] };
+  }
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) {
@@ -132,8 +140,16 @@ export function loadVaquinhas(): VaquinhasPersisted {
 }
 
 export function saveVaquinhas(p: VaquinhasPersisted, opts?: { silent?: boolean }) {
-  localStorage.setItem(KEY, JSON.stringify({ version: 4 as const, items: p.items }));
+  const normalized = { version: 4 as const, items: p.items };
+  memoryVaquinhas = normalized;
+  if (!isCloudSessionActive()) {
+    localStorage.setItem(KEY, JSON.stringify(normalized));
+  }
   if (!opts?.silent) {
     window.dispatchEvent(new Event(VAQUINHAS_SYNC_EVENT));
   }
+}
+
+export function clearVaquinhasMemory(): void {
+  memoryVaquinhas = null;
 }
