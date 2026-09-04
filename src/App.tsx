@@ -34,7 +34,9 @@ function FinancasShell() {
   const { open: loginPromptOpen, dismiss: dismissLoginPrompt } = useGoogleLoginPrompt();
 
   useEffect(() => {
-    if (tab !== "accounts" && tab !== "futureIncome" && tab !== "patrimony") return;
+    if (tab !== "accounts" && tab !== "futureIncome" && tab !== "patrimony" && tab !== "home" && tab !== "flow") {
+      return;
+    }
     refreshFinanceFromCloud();
   }, [tab, refreshFinanceFromCloud]);
 

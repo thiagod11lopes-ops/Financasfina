@@ -173,6 +173,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const localEntityBirthRef = useRef<Map<string, number>>(new Map());
   const persistTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const persistInFlightRef = useRef(false);
+  /** Se um flush chegou enquanto outro ainda gravava, repetir no fim. */
+  const persistQueuedRef = useRef(false);
+  /**
+   * Só depois da 1.ª leitura no servidor aceitamos snapshots `fromCache` mais novos —
+   * evita IndexedDB antigo apagar a nuvem no arranque, sem bloquear sync entre aparelhos.
+   */
+  const initialServerHydrateDoneRef = useRef(false);
   /** Com sessão ativa: em rede, a nuvem é a única fonte (sem fundir com cache local). */
   const networkOnlineRef = useRef(
     typeof navigator !== "undefined" ? navigator.onLine : true,
@@ -204,11 +211,103 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     localEntityBirthRef.current.delete(id);
   }
 
+  const tryApplyRemoteFinanceDoc = useCallback((data: Record<string, unknown>, snap: DocumentSnapshot) => {
+    if (data.payload == null) return;
+    const online = networkOnlineRef.current;
+    const remoteWriteSeq =
+      typeof data.payloadWriteSeq === "number" &&
+      Number.isFinite(data.payloadWriteSeq) &&
+      data.payloadWriteSeq >= 0
+        ? data.payloadWriteSeq
+        : 0;
+    const payloadTimeMs =
+      firestoreTimestampMs(data.payloadUpdatedAt) || firestoreTimestampMs(data.updatedAt);
+
+    /**
+     * Antes da hidratação no servidor, ignora cache IndexedDB (pode ser de outra sessão).
+     * Depois, aceita `fromCache` se o seq/tempo for mais novo — senão o outro aparelho
+     * nunca atualiza em tempo real em PWAs / multi-aba.
+     */
+    if (online && snap.metadata.fromCache && !snap.metadata.hasPendingWrites) {
+      if (!initialServerHydrateDoneRef.current) return;
+      if (remoteWriteSeq < lastPayloadWriteSeqRef.current) return;
+      if (
+        remoteWriteSeq === lastPayloadWriteSeqRef.current &&
+        payloadTimeMs <= lastPayloadRemoteMsRef.current
+      ) {
+        return;
+      }
+    }
+    if (remoteWriteSeq < lastPayloadWriteSeqRef.current) {
+      return;
+    }
+    const allowPersistAfterRemote = () => {
+      lastPayloadWriteSeqRef.current = Math.max(
+        lastPayloadWriteSeqRef.current,
+        remoteWriteSeq,
+      );
+      allowFinanceCloudPersistRef.current = true;
+    };
+    const remoteRevived = reviveAppStateFromUnknown(data.payload);
+    pruneBirthRefForIdsAckedInRemote(localEntityBirthRef.current, remoteRevived);
+    pruneOrphanBirthIds(localEntityBirthRef.current, stateRef.current);
+    const merged =
+      localEntityBirthRef.current.size > 0
+        ? mergeRemotePreservingPendingUploads(
+            stateRef.current,
+            remoteRevived,
+            localEntityBirthRef.current,
+            Date.now(),
+          )
+        : remoteRevived;
+    const remoteCanonicalJson = JSON.stringify(remoteRevived);
+    const nextJson = JSON.stringify(merged);
+    const lastMs = lastPayloadRemoteMsRef.current;
+    const lastJson = lastPayloadRemoteJsonRef.current;
+
+    if (payloadTimeMs < lastMs && remoteWriteSeq <= lastPayloadWriteSeqRef.current) return;
+
+    if (payloadTimeMs === lastMs && nextJson === lastJson) return;
+
+    if (
+      payloadTimeMs === lastMs &&
+      nextJson !== lastJson &&
+      snap.metadata.fromCache &&
+      !snap.metadata.hasPendingWrites &&
+      remoteWriteSeq <= lastPayloadWriteSeqRef.current
+    ) {
+      return;
+    }
+
+    if (payloadTimeMs > lastMs && nextJson === lastJson) {
+      lastPayloadRemoteMsRef.current = payloadTimeMs;
+      allowPersistAfterRemote();
+      return;
+    }
+
+    if (JSON.stringify(stateRef.current) === nextJson) {
+      lastPayloadRemoteMsRef.current = Math.max(payloadTimeMs, lastMs);
+      lastPayloadRemoteJsonRef.current = nextJson;
+      allowPersistAfterRemote();
+      return;
+    }
+
+    lastPayloadRemoteMsRef.current = Math.max(payloadTimeMs, lastMs);
+    lastPayloadRemoteJsonRef.current = nextJson;
+    skipNextFinancePersistRef.current = nextJson === remoteCanonicalJson;
+    allowPersistAfterRemote();
+    stateRef.current = merged;
+    setState(merged);
+  }, []);
+
   const flushFinancePersistToCloud = useCallback(() => {
     void (async () => {
       if (!allowFinanceCloudPersistRef.current) return;
       if (!fbConfigured || !authReady || !fbUser) return;
-      if (persistInFlightRef.current) return;
+      if (persistInFlightRef.current) {
+        persistQueuedRef.current = true;
+        return;
+      }
       persistInFlightRef.current = true;
       const app = getFirebaseApp();
       if (!app) {
@@ -228,6 +327,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
             serverSnap = await getDocFromServer(ref);
           } catch (e) {
             console.warn("[Finanças] persist: leitura no servidor falhou", e);
+            persistQueuedRef.current = true;
             return;
           }
           if (serverSnap.exists()) {
@@ -239,10 +339,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
                 ? d.payloadWriteSeq
                 : 0;
             serverSeqForBump = srvSeq;
-            /** Outro aparelho (ou outra aba) gravou primeiro: o Firebase é a fonte da verdade. */
+            /** Outro aparelho gravou primeiro: aplica remoto (preserva lançamentos locais recentes) e regrava. */
             if (srvSeq > lastPayloadWriteSeqRef.current && d.payload != null) {
               tryApplyRemoteFinanceDoc(d, serverSnap as DocumentSnapshot);
-              return;
+              pruneOrphanBirthIds(localEntityBirthRef.current, stateRef.current);
+              if (localEntityBirthRef.current.size === 0) {
+                return;
+              }
+              serverSeqForBump = Math.max(serverSeqForBump, lastPayloadWriteSeqRef.current);
             }
           }
         }
@@ -268,89 +372,16 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         }
       } catch (err) {
         console.error("[Finanças Firestore persist]", err);
+        persistQueuedRef.current = true;
       } finally {
         persistInFlightRef.current = false;
+        if (persistQueuedRef.current) {
+          persistQueuedRef.current = false;
+          flushFinancePersistToCloud();
+        }
       }
     })();
-  }, [fbConfigured, authReady, fbUser]);
-
-  const tryApplyRemoteFinanceDoc = useCallback((data: Record<string, unknown>, snap: DocumentSnapshot) => {
-    if (data.payload == null) return;
-    const online = networkOnlineRef.current;
-    /** Evita aplicar/gravar payload antigo da IndexedDB antes do servidor (outro aparelho “não vê” dados e o refresh pode sobrescrever a nuvem). */
-    if (online && snap.metadata.fromCache && !snap.metadata.hasPendingWrites) {
-      return;
-    }
-    const remoteWriteSeq =
-      typeof data.payloadWriteSeq === "number" &&
-      Number.isFinite(data.payloadWriteSeq) &&
-      data.payloadWriteSeq >= 0
-        ? data.payloadWriteSeq
-        : 0;
-    if (remoteWriteSeq < lastPayloadWriteSeqRef.current) {
-      return;
-    }
-    const allowPersistAfterRemote = () => {
-      lastPayloadWriteSeqRef.current = Math.max(
-        lastPayloadWriteSeqRef.current,
-        remoteWriteSeq,
-      );
-      allowFinanceCloudPersistRef.current = true;
-    };
-    const payloadTimeMs =
-      firestoreTimestampMs(data.payloadUpdatedAt) || firestoreTimestampMs(data.updatedAt);
-    const remoteRevived = reviveAppStateFromUnknown(data.payload);
-    if (online) {
-      localEntityBirthRef.current.clear();
-    } else {
-      pruneBirthRefForIdsAckedInRemote(localEntityBirthRef.current, remoteRevived);
-      pruneOrphanBirthIds(localEntityBirthRef.current, stateRef.current);
-    }
-    const merged = online
-      ? remoteRevived
-      : mergeRemotePreservingPendingUploads(
-          stateRef.current,
-          remoteRevived,
-          localEntityBirthRef.current,
-          Date.now(),
-        );
-    const remoteCanonicalJson = JSON.stringify(remoteRevived);
-    const nextJson = JSON.stringify(merged);
-    const lastMs = lastPayloadRemoteMsRef.current;
-    const lastJson = lastPayloadRemoteJsonRef.current;
-
-    if (payloadTimeMs < lastMs) return;
-
-    if (payloadTimeMs === lastMs && nextJson === lastJson) return;
-
-    if (
-      payloadTimeMs === lastMs &&
-      nextJson !== lastJson &&
-      snap.metadata.fromCache &&
-      !snap.metadata.hasPendingWrites
-    ) {
-      return;
-    }
-
-    if (payloadTimeMs > lastMs && nextJson === lastJson) {
-      lastPayloadRemoteMsRef.current = payloadTimeMs;
-      allowPersistAfterRemote();
-      return;
-    }
-
-    if (JSON.stringify(stateRef.current) === nextJson) {
-      lastPayloadRemoteMsRef.current = payloadTimeMs;
-      lastPayloadRemoteJsonRef.current = nextJson;
-      allowPersistAfterRemote();
-      return;
-    }
-
-    lastPayloadRemoteMsRef.current = payloadTimeMs;
-    lastPayloadRemoteJsonRef.current = nextJson;
-    skipNextFinancePersistRef.current = nextJson === remoteCanonicalJson;
-    allowPersistAfterRemote();
-    setState(merged);
-  }, []);
+  }, [fbConfigured, authReady, fbUser, tryApplyRemoteFinanceDoc]);
 
   useEffect(() => {
     lastPayloadRemoteMsRef.current = 0;
@@ -358,6 +389,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     lastPayloadWriteSeqRef.current = 0;
     localEntityBirthRef.current.clear();
     allowFinanceCloudPersistRef.current = false;
+    initialServerHydrateDoneRef.current = false;
+    persistQueuedRef.current = false;
     const uid = fbUser?.uid;
     if (uid && typeof navigator !== "undefined" && navigator.onLine) {
       setState({ ...FINANCES_EMPTY_STATE });
@@ -431,10 +464,15 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           const data = serverSnap.data() as Record<string, unknown>;
           if (data.payload != null) {
             tryApplyRemoteFinanceDoc(data, serverSnap);
+          } else {
+            allowFinanceCloudPersistRef.current = true;
           }
         }
       } catch (e) {
         console.warn("[Finanças] hidratação inicial (getDocFromServer)", e);
+        allowFinanceCloudPersistRef.current = true;
+      } finally {
+        if (!cancelled) initialServerHydrateDoneRef.current = true;
       }
 
       if (cancelled) return;
@@ -463,6 +501,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
                 },
                 { merge: true },
               ).catch((err) => console.error("[Finanças Firestore bootstrap]", err));
+              allowFinanceCloudPersistRef.current = true;
             }
             return;
           }
@@ -507,11 +546,17 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     };
     document.addEventListener("visibilitychange", onVis);
     window.addEventListener("online", pullFromServer);
+    window.addEventListener("focus", pullFromServer);
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") pullFromServer();
+    }, 12_000);
     return () => {
       cancelled = true;
       pullFinanceFromServerRef.current = null;
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("online", pullFromServer);
+      window.removeEventListener("focus", pullFromServer);
+      window.clearInterval(intervalId);
     };
   }, [fbConfigured, authReady, fbUser, tryApplyRemoteFinanceDoc]);
 
