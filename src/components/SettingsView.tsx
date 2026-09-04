@@ -148,6 +148,14 @@ export function SettingsView({ visible = true }: { visible?: boolean }) {
               . Finanças, resumo, agenda e
               utilizadores sincronizam no Firestore; ao sair, guarda-se uma cópia local para usar sem login.
             </p>
+            <p className="settings-muted" style={{ fontSize: "0.85em", wordBreak: "break-all" }}>
+              UID: <code className="settings-inline-code">{fbUser.uid}</code>
+              {import.meta.env.VITE_FIREBASE_PROJECT_ID
+                ? <> · Projeto: <code className="settings-inline-code">{String(import.meta.env.VITE_FIREBASE_PROJECT_ID).trim()}</code></>
+                : null}
+              . Nos dois aparelhos estes valores têm de ser iguais; no Console abra{" "}
+              <code className="settings-inline-code">userFinances / esse UID</code>.
+            </p>
             <button type="button" className="settings-btn settings-btn--outline" onClick={() => void signOutUser()}>
               Sair da conta Google
             </button>
