@@ -33,6 +33,8 @@ import type {
   VariableSpend,
 } from "../types";
 import {
+  mergeRemotePreservingPendingUploads,
+  pruneBirthRefForIdsAckedInRemote,
   pruneOrphanBirthIds,
 } from "../finance/mergeRemoteSnapshot";
 import { FINANCES_EMPTY_STATE, reviveAppStateFromUnknown } from "../finance/reviveAppState";
@@ -68,6 +70,19 @@ function loadState(): AppState {
   } catch {
     return { ...FINANCES_EMPTY_STATE };
   }
+}
+
+function isAppStateEmpty(s: AppState): boolean {
+  return (
+    s.movements.length === 0 &&
+    s.fixedAccounts.length === 0 &&
+    s.variableAccounts.length === 0 &&
+    s.recurringAccounts.length === 0 &&
+    s.supermarket.length === 0 &&
+    s.fuel.length === 0 &&
+    s.futureIncomes.length === 0 &&
+    s.patrimonyAssets.length === 0
+  );
 }
 
 function clearAllDomainMemory(): void {
@@ -203,10 +218,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   /** Se um flush chegou enquanto outro ainda gravava, repetir no fim. */
   const persistQueuedRef = useRef(false);
   /**
-   * Só depois da 1.ª leitura no servidor aceitamos snapshots `fromCache` mais novos —
-   * evita IndexedDB antigo apagar a nuvem no arranque, sem bloquear sync entre aparelhos.
+   * Só depois da 1.ª leitura bem-sucedida no servidor liberamos gravações —
+   * evita sobrescrever a nuvem com estado vazio no arranque.
    */
-  const initialServerHydrateDoneRef = useRef(false);
+  const cloudReadyRef = useRef(false);
+  /** Permite gravar estado vazio na nuvem (ex.: “apagar todos os dados”). */
+  const allowEmptyCloudWriteRef = useRef(false);
   /** Com sessão ativa: em rede, a nuvem é a única fonte (sem fundir com cache local). */
   const networkOnlineRef = useRef(
     typeof navigator !== "undefined" ? navigator.onLine : true,
@@ -239,7 +256,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }
 
   const tryApplyRemoteFinanceDoc = useCallback((data: Record<string, unknown>, snap: DocumentSnapshot) => {
-    if (data.payload == null) return;
+    if (data.payload == null) return false;
     const remoteWriteSeq =
       typeof data.payloadWriteSeq === "number" &&
       Number.isFinite(data.payloadWriteSeq) &&
@@ -249,44 +266,56 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const payloadTimeMs =
       firestoreTimestampMs(data.payloadUpdatedAt) || firestoreTimestampMs(data.updatedAt);
 
-    /** Com sessão cloud, o Firebase é a única fonte — ignora cache antigo só antes da 1.ª hidratação. */
-    if (snap.metadata.fromCache && !snap.metadata.hasPendingWrites && !initialServerHydrateDoneRef.current) {
-      return;
+    if (snap.metadata.fromCache && !snap.metadata.hasPendingWrites && !cloudReadyRef.current) {
+      return false;
     }
-    if (remoteWriteSeq < lastPayloadWriteSeqRef.current) return;
+    if (remoteWriteSeq < lastPayloadWriteSeqRef.current) return false;
 
     const remoteRevived = reviveAppStateFromUnknown(data.payload);
-    const nextJson = JSON.stringify(remoteRevived);
+    pruneBirthRefForIdsAckedInRemote(localEntityBirthRef.current, remoteRevived);
+    pruneOrphanBirthIds(localEntityBirthRef.current, stateRef.current);
+    const merged =
+      localEntityBirthRef.current.size > 0
+        ? mergeRemotePreservingPendingUploads(
+            stateRef.current,
+            remoteRevived,
+            localEntityBirthRef.current,
+            Date.now(),
+          )
+        : remoteRevived;
+    const nextJson = JSON.stringify(merged);
     const lastMs = lastPayloadRemoteMsRef.current;
     const lastJson = lastPayloadRemoteJsonRef.current;
 
     if (remoteWriteSeq === lastPayloadWriteSeqRef.current) {
-      if (payloadTimeMs < lastMs) return;
-      if (payloadTimeMs === lastMs && nextJson === lastJson) return;
-    }
-
-    if (JSON.stringify(stateRef.current) === nextJson) {
-      lastPayloadRemoteMsRef.current = Math.max(payloadTimeMs, lastMs);
-      lastPayloadRemoteJsonRef.current = nextJson;
-      lastPayloadWriteSeqRef.current = Math.max(lastPayloadWriteSeqRef.current, remoteWriteSeq);
-      allowFinanceCloudPersistRef.current = true;
-      localEntityBirthRef.current.clear();
-      return;
+      if (payloadTimeMs < lastMs) return false;
+      if (payloadTimeMs === lastMs && nextJson === lastJson) {
+        allowFinanceCloudPersistRef.current = true;
+        cloudReadyRef.current = true;
+        return true;
+      }
     }
 
     lastPayloadRemoteMsRef.current = Math.max(payloadTimeMs, lastMs);
     lastPayloadRemoteJsonRef.current = nextJson;
     lastPayloadWriteSeqRef.current = Math.max(lastPayloadWriteSeqRef.current, remoteWriteSeq);
     allowFinanceCloudPersistRef.current = true;
-    localEntityBirthRef.current.clear();
-    skipNextFinancePersistRef.current = true;
-    stateRef.current = remoteRevived;
-    setState(remoteRevived);
+    cloudReadyRef.current = true;
+
+    if (JSON.stringify(stateRef.current) === nextJson) {
+      localEntityBirthRef.current.clear();
+      return true;
+    }
+
+    skipNextFinancePersistRef.current = localEntityBirthRef.current.size === 0;
+    stateRef.current = merged;
+    setState(merged);
+    return true;
   }, []);
 
   const flushFinancePersistToCloud = useCallback(() => {
     void (async () => {
-      if (!allowFinanceCloudPersistRef.current) return;
+      if (!allowFinanceCloudPersistRef.current || !cloudReadyRef.current) return;
       if (!fbConfigured || !authReady || !fbUser) return;
       if (persistInFlightRef.current) {
         persistQueuedRef.current = true;
@@ -304,6 +333,27 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       try {
         pruneOrphanBirthIds(localEntityBirthRef.current, stateRef.current);
         const payload = stripUndefinedDeep(reviveAppStateFromUnknown(stateRef.current));
+
+        /** Nunca apagar a nuvem com estado vazio acidental (ex.: refresh antes de hidratar). */
+        if (isAppStateEmpty(payload) && !allowEmptyCloudWriteRef.current) {
+          try {
+            const serverSnap = await getDocFromServer(ref);
+            if (serverSnap.exists()) {
+              const d = serverSnap.data() as Record<string, unknown>;
+              if (d.payload != null) {
+                const remote = reviveAppStateFromUnknown(d.payload);
+                if (!isAppStateEmpty(remote)) {
+                  tryApplyRemoteFinanceDoc(d, serverSnap as DocumentSnapshot);
+                  return;
+                }
+              }
+            }
+          } catch (e) {
+            console.warn("[Finanças] persist: guard de estado vazio falhou", e);
+            return;
+          }
+        }
+
         await setDoc(
           ref,
           {
@@ -315,6 +365,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           },
           { merge: true },
         );
+        allowEmptyCloudWriteRef.current = false;
         lastPayloadWriteSeqRef.current = Math.max(lastPayloadWriteSeqRef.current + 1, 1);
         lastPayloadRemoteJsonRef.current = JSON.stringify(payload);
         localEntityBirthRef.current.clear();
@@ -329,7 +380,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         }
       }
     })();
-  }, [fbConfigured, authReady, fbUser]);
+  }, [fbConfigured, authReady, fbUser, tryApplyRemoteFinanceDoc]);
 
   useEffect(() => {
     lastPayloadRemoteMsRef.current = 0;
@@ -337,7 +388,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     lastPayloadWriteSeqRef.current = 0;
     localEntityBirthRef.current.clear();
     allowFinanceCloudPersistRef.current = false;
-    initialServerHydrateDoneRef.current = false;
+    cloudReadyRef.current = false;
+    allowEmptyCloudWriteRef.current = false;
     persistQueuedRef.current = false;
 
     if (fbUser?.uid) {
@@ -414,20 +466,24 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           stateRef.current = payload;
           setState(payload);
           allowFinanceCloudPersistRef.current = true;
+          cloudReadyRef.current = true;
           lastPayloadWriteSeqRef.current = Math.max(lastPayloadWriteSeqRef.current, 1);
         } else {
           const data = serverSnap.data() as Record<string, unknown>;
           if (data.payload != null) {
-            tryApplyRemoteFinanceDoc(data, serverSnap);
+            const applied = tryApplyRemoteFinanceDoc(data, serverSnap);
+            if (!applied) {
+              allowFinanceCloudPersistRef.current = true;
+              cloudReadyRef.current = true;
+            }
           } else {
             allowFinanceCloudPersistRef.current = true;
+            cloudReadyRef.current = true;
           }
         }
       } catch (e) {
         console.warn("[Finanças] hidratação inicial (getDocFromServer)", e);
-        allowFinanceCloudPersistRef.current = true;
-      } finally {
-        if (!cancelled) initialServerHydrateDoneRef.current = true;
+        /** Não libera gravação com estado vazio — espera o onSnapshot do servidor. */
       }
 
       if (cancelled) return;
@@ -453,6 +509,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
                 { merge: true },
               ).catch((err) => console.error("[Finanças Firestore bootstrap]", err));
               allowFinanceCloudPersistRef.current = true;
+              cloudReadyRef.current = true;
               skipNextFinancePersistRef.current = true;
               stateRef.current = payload;
               setState(payload);
@@ -875,6 +932,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   const resetAllData = useCallback(() => {
     localEntityBirthRef.current.clear();
+    allowEmptyCloudWriteRef.current = true;
+    allowFinanceCloudPersistRef.current = true;
+    cloudReadyRef.current = true;
     setState({ ...FINANCES_EMPTY_STATE });
   }, []);
 

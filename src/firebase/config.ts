@@ -1,5 +1,4 @@
 import { getApps, initializeApp, type FirebaseApp } from "firebase/app";
-import { initializeFirestore, memoryLocalCache } from "firebase/firestore";
 import { initFirebaseAuth } from "./auth";
 
 const keys = [
@@ -39,12 +38,6 @@ export function getFirebaseApp(): FirebaseApp | null {
     appId: envStr("VITE_FIREBASE_APP_ID"),
   };
   cached = getApps().length > 0 ? getApps()[0]! : initializeApp(config);
-  /** Sem cache IndexedDB do Firestore: cada aparelho lê/escreve só o servidor. */
-  try {
-    initializeFirestore(cached, { localCache: memoryLocalCache() });
-  } catch {
-    /* já inicializado (HMR / 2.ª chamada) */
-  }
   initFirebaseAuth(cached);
   return cached;
 }
