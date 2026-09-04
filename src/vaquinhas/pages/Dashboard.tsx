@@ -10,12 +10,15 @@ import {
 } from "../utils";
 import { VaquinhaFormModal } from "../components/VaquinhaFormModal";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { CopyLastVaquinhaModal } from "../components/CopyLastVaquinhaModal";
 import type { Vaquinha, VaquinhaInput } from "../types";
 
 export function Dashboard() {
   const { items, createVaquinha, updateVaquinha, deleteVaquinha } = useVaquinhas();
   const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
+  const [createDraft, setCreateDraft] = useState<Vaquinha | null>(null);
+  const [copyPromptOpen, setCopyPromptOpen] = useState(false);
   const [finishedOpen, setFinishedOpen] = useState(false);
   const [editing, setEditing] = useState<Vaquinha | null>(null);
   const [deleting, setDeleting] = useState<Vaquinha | null>(null);
@@ -32,6 +35,38 @@ export function Dashboard() {
     finishedList.sort(byNewest);
     return { active: activeList, finished: finishedList };
   }, [items]);
+
+  const lastVaquinha = useMemo(() => {
+    if (!items.length) return null;
+    return [...items].sort((a, b) => (a.createdAtIso < b.createdAtIso ? 1 : -1))[0] ?? null;
+  }, [items]);
+
+  const openCreateBlank = () => {
+    setCreateDraft(null);
+    setCreateOpen(true);
+  };
+
+  const openCreateFromLast = () => {
+    if (!lastVaquinha) {
+      openCreateBlank();
+      return;
+    }
+    setCreateDraft(lastVaquinha);
+    setCreateOpen(true);
+  };
+
+  const startCreateFlow = () => {
+    if (lastVaquinha) {
+      setCopyPromptOpen(true);
+      return;
+    }
+    openCreateBlank();
+  };
+
+  const closeCreate = () => {
+    setCreateOpen(false);
+    setCreateDraft(null);
+  };
 
   const goHome = () => {
     const base = import.meta.env.BASE_URL || "/";
@@ -63,7 +98,7 @@ export function Dashboard() {
           <button
             type="button"
             className="vaq-add-top"
-            onClick={() => setCreateOpen(true)}
+            onClick={startCreateFlow}
             aria-label="Adicionar nova vaquinha"
             title="Nova vaquinha"
           >
@@ -145,13 +180,28 @@ export function Dashboard() {
         </div>
       )}
 
-<VaquinhaFormModal
+      <CopyLastVaquinhaModal
+        open={copyPromptOpen}
+        source={lastVaquinha}
+        onClose={() => setCopyPromptOpen(false)}
+        onNo={() => {
+          setCopyPromptOpen(false);
+          openCreateBlank();
+        }}
+        onYes={() => {
+          setCopyPromptOpen(false);
+          openCreateFromLast();
+        }}
+      />
+
+      <VaquinhaFormModal
         open={createOpen}
         mode="create"
-        onClose={() => setCreateOpen(false)}
+        initial={createDraft}
+        onClose={closeCreate}
         onSubmit={(input: VaquinhaInput) => {
           createVaquinha(input);
-          setCreateOpen(false);
+          closeCreate();
         }}
       />
 

@@ -31,7 +31,7 @@ export function VaquinhaFormModal({ open, mode, initial, onClose, onSubmit }: Pr
 
   useEffect(() => {
     if (!open) return;
-    if (mode === "edit" && initial) {
+    if (initial) {
       setName(initial.name);
       setTotal((initial.totalCents / 100).toFixed(2).replace(".", ","));
       setPerPerson((initial.perPersonCents / 100).toFixed(2).replace(".", ","));
