@@ -1,19 +1,13 @@
-﻿import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import type { Vaquinha, VaquinhaTitle, VaquinhasPersisted } from "./types";
-import type { TitleStatus } from "./types";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import type { Vaquinha, VaquinhasPersisted } from "./types";
 import { uid } from "./utils";
 import { loadVaquinhas, saveVaquinhas } from "./storage";
 
 type VaquinhasCtx = {
   items: Vaquinha[];
-  createVaquinha: (name: string) => void;
+  createVaquinha: (name: string, expectedCents: number) => void;
+  updateVaquinha: (id: string, patch: Partial<Pick<Vaquinha, "name" | "expectedCents" | "paidCents">>) => void;
   deleteVaquinha: (id: string) => void;
-
-  addTitle: (vaquinhaId: string, t: Omit<VaquinhaTitle, "id" | "status" | "paidAtIso">) => void;
-  toggleTitleStatus: (vaquinhaId: string, titleId: string) => void;
-  removeTitle: (vaquinhaId: string, titleId: string) => void;
-
-  getVaquinhaById: (id: string) => Vaquinha | undefined;
 };
 
 const VaquinhasContext = createContext<VaquinhasCtx | null>(null);
@@ -28,86 +22,49 @@ export function VaquinhasProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<Vaquinha[]>(() => loadVaquinhas().items);
 
   useEffect(() => {
-    const p: VaquinhasPersisted = { version: 1, items };
+    const p: VaquinhasPersisted = { version: 2, items };
     saveVaquinhas(p);
   }, [items]);
 
-  const createVaquinha = useCallback((name: string) => {
+  const createVaquinha = useCallback((name: string, expectedCents: number) => {
     const n = name.trim();
-    if (!n) return;
+    if (!n || expectedCents <= 0) return;
     setItems((prev) => [
       ...prev,
       {
         id: uid("vaq"),
         name: n,
+        expectedCents,
+        paidCents: 0,
         createdAtIso: new Date().toISOString(),
-        titles: [],
       },
     ]);
   }, []);
 
-  const deleteVaquinha = useCallback((id: string) => {
-    setItems((prev) => prev.filter((x) => x.id !== id));
-  }, []);
-
-  const addTitle = useCallback(
-    (vaquinhaId: string, t: Omit<VaquinhaTitle, "id" | "status" | "paidAtIso">) => {
+  const updateVaquinha = useCallback(
+    (id: string, patch: Partial<Pick<Vaquinha, "name" | "expectedCents" | "paidCents">>) => {
       setItems((prev) =>
         prev.map((v) => {
-          if (v.id !== vaquinhaId) return v;
-          const title: VaquinhaTitle = {
-            ...t,
-            id: uid("t"),
-            status: "pending",
-            paidAtIso: undefined,
-          };
-          return { ...v, titles: [...v.titles, title] };
+          if (v.id !== id) return v;
+          const next = { ...v, ...patch };
+          if (next.expectedCents < 0) next.expectedCents = 0;
+          if (next.paidCents < 0) next.paidCents = 0;
+          if (next.paidCents > next.expectedCents) next.paidCents = next.expectedCents;
+          return next;
         }),
       );
     },
     [],
   );
 
-  const toggleTitleStatus = useCallback((vaquinhaId: string, titleId: string) => {
-    setItems((prev) =>
-      prev.map((v) => {
-        if (v.id !== vaquinhaId) return v;
-        return {
-          ...v,
-          titles: v.titles.map((t) => {
-            if (t.id !== titleId) return t;
-            const next: TitleStatus = t.status === "paid" ? "pending" : "paid";
-            return {
-              ...t,
-              status: next,
-              paidAtIso: next === "paid" ? new Date().toISOString() : undefined,
-            };
-          }),
-        };
-      }),
-    );
+  const deleteVaquinha = useCallback((id: string) => {
+    setItems((prev) => prev.filter((x) => x.id !== id));
   }, []);
-
-  const removeTitle = useCallback((vaquinhaId: string, titleId: string) => {
-    setItems((prev) =>
-      prev.map((v) => {
-        if (v.id !== vaquinhaId) return v;
-        return { ...v, titles: v.titles.filter((t) => t.id !== titleId) };
-      }),
-    );
-  }, []);
-
-  const getVaquinhaById = useCallback(
-    (id: string) => items.find((x) => x.id === id),
-    [items],
-  );
 
   const value = useMemo(
-    () => ({ items, createVaquinha, deleteVaquinha, addTitle, toggleTitleStatus, removeTitle, getVaquinhaById }),
-    [items, createVaquinha, deleteVaquinha, addTitle, toggleTitleStatus, removeTitle, getVaquinhaById],
+    () => ({ items, createVaquinha, updateVaquinha, deleteVaquinha }),
+    [items, createVaquinha, updateVaquinha, deleteVaquinha],
   );
 
   return <VaquinhasContext.Provider value={value}>{children}</VaquinhasContext.Provider>;
 }
-
-
