@@ -1,19 +1,38 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useVaquinhas } from "../VaquinhasContext";
-import { formatMoneyBRLFromCents, vaquinhaPaidCents, vaquinhaPendingCents } from "../utils";
+import {
+  formatMoneyBRLFromCents,
+  isVaquinhaFinished,
+  vaquinhaPaidCents,
+  vaquinhaPendingCents,
+} from "../utils";
 import { CreateVaquinhaModal } from "../components/CreateVaquinhaModal";
+import type { Vaquinha } from "../types";
+
+function summarize(list: Vaquinha[]) {
+  const expected = list.reduce((a, v) => a + v.totalCents, 0);
+  const paid = list.reduce((a, v) => a + vaquinhaPaidCents(v), 0);
+  const pending = list.reduce((a, v) => a + vaquinhaPendingCents(v), 0);
+  return { expected, paid, pending, count: list.length };
+}
 
 export function Dashboard() {
   const { items, createVaquinha } = useVaquinhas();
   const [createOpen, setCreateOpen] = useState(false);
 
-  const totals = useMemo(() => {
-    const expected = items.reduce((a, v) => a + v.totalCents, 0);
-    const paid = items.reduce((a, v) => a + vaquinhaPaidCents(v), 0);
-    const pending = items.reduce((a, v) => a + vaquinhaPendingCents(v), 0);
-    return { expected, paid, pending };
+  const { active, finished } = useMemo(() => {
+    const activeList: Vaquinha[] = [];
+    const finishedList: Vaquinha[] = [];
+    for (const v of items) {
+      if (isVaquinhaFinished(v)) finishedList.push(v);
+      else activeList.push(v);
+    }
+    return { active: activeList, finished: finishedList };
   }, [items]);
+
+  const activeTotals = useMemo(() => summarize(active), [active]);
+  const finishedTotals = useMemo(() => summarize(finished), [finished]);
 
   const goHome = () => {
     const base = import.meta.env.BASE_URL || "/";
@@ -32,39 +51,79 @@ export function Dashboard() {
         <span className="vaq-top__spacer" aria-hidden />
       </div>
 
-      <section className="vaq-dash" aria-label="Dashboard">
+      <section className="vaq-dash" aria-label="Dashboard em andamento">
         <div className="vaq-dash__glow" aria-hidden />
-        <p className="vaq-dash__eyebrow">Dashboard</p>
+        <div className="vaq-dash__head">
+          <p className="vaq-dash__eyebrow">Em andamento</p>
+          <span className="vaq-dash__count">{activeTotals.count}</span>
+        </div>
         <div className="vaq-totals">
           <div className="vaq-total">
             <span className="vaq-total__label">Esperado</span>
-            <strong className="vaq-total__value">{formatMoneyBRLFromCents(totals.expected)}</strong>
+            <strong className="vaq-total__value">{formatMoneyBRLFromCents(activeTotals.expected)}</strong>
           </div>
           <div className="vaq-total">
             <span className="vaq-total__label">Pago</span>
             <strong className="vaq-total__value vaq-total__value--paid">
-              {formatMoneyBRLFromCents(totals.paid)}
+              {formatMoneyBRLFromCents(activeTotals.paid)}
             </strong>
           </div>
           <div className="vaq-total">
             <span className="vaq-total__label">Pendente</span>
             <strong className="vaq-total__value vaq-total__value--pending">
-              {formatMoneyBRLFromCents(totals.pending)}
+              {formatMoneyBRLFromCents(activeTotals.pending)}
             </strong>
           </div>
         </div>
       </section>
 
-      {items.length > 0 ? (
-        <section className="vaq-names" aria-label="Vaquinhas criadas">
-          <h2 className="vaq-section-title">Suas vaquinhas</h2>
+      <section className="vaq-dash vaq-dash--finished" aria-label="Dashboard finalizadas">
+        <div className="vaq-dash__head">
+          <p className="vaq-dash__eyebrow">Finalizadas</p>
+          <span className="vaq-dash__count">{finishedTotals.count}</span>
+        </div>
+        <div className="vaq-totals">
+          <div className="vaq-total">
+            <span className="vaq-total__label">Total</span>
+            <strong className="vaq-total__value">{formatMoneyBRLFromCents(finishedTotals.expected)}</strong>
+          </div>
+          <div className="vaq-total">
+            <span className="vaq-total__label">Pago</span>
+            <strong className="vaq-total__value vaq-total__value--paid">
+              {formatMoneyBRLFromCents(finishedTotals.paid)}
+            </strong>
+          </div>
+          <div className="vaq-total">
+            <span className="vaq-total__label">Concluídas</span>
+            <strong className="vaq-total__value">{finishedTotals.count}</strong>
+          </div>
+        </div>
+      </section>
+
+      {active.length > 0 ? (
+        <section className="vaq-names" aria-label="Vaquinhas em andamento">
+          <h2 className="vaq-section-title">Atuais</h2>
           <div className="vaq-name-list">
-            {items.map((v) => (
+            {active.map((v) => (
               <Link key={v.id} to={`/vaquinhas/${v.id}`} className="vaq-name-card">
                 <span className="vaq-name-card__title">{v.name}</span>
                 <span className="vaq-name-card__chevron" aria-hidden>
                   ›
                 </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {finished.length > 0 ? (
+        <section className="vaq-names" aria-label="Vaquinhas finalizadas">
+          <h2 className="vaq-section-title">Finalizadas</h2>
+          <div className="vaq-name-list">
+            {finished.map((v) => (
+              <Link key={v.id} to={`/vaquinhas/${v.id}`} className="vaq-name-card vaq-name-card--done">
+                <span className="vaq-name-card__title">{v.name}</span>
+                <span className="vaq-name-card__badge">OK</span>
               </Link>
             ))}
           </div>
@@ -88,11 +147,8 @@ export function Dashboard() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreate={(input) => {
-          const id = createVaquinha(input);
+          createVaquinha(input);
           setCreateOpen(false);
-          if (id) {
-            // stay on list; user can tap the new name
-          }
         }}
       />
     </div>

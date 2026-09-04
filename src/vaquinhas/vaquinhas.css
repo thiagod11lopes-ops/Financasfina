@@ -314,3 +314,41 @@
   .vaq-modal-backdrop { align-items:center; }
   .vaq-fab { right: max(28px, calc((100vw - 720px) / 2 + 18px)); }
 }
+
+.vaq-dash__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  position: relative;
+}
+.vaq-dash__eyebrow { margin: 0; }
+.vaq-dash__count {
+  min-width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #0f172a;
+  background: linear-gradient(135deg, #a78bfa, #22d3ee);
+}
+.vaq-dash--finished {
+  background: linear-gradient(160deg, rgba(6, 78, 59, 0.35), rgba(15, 23, 42, 0.88));
+  border-color: rgba(52, 211, 153, 0.22);
+}
+.vaq-name-card--done {
+  border-color: rgba(52, 211, 153, 0.28);
+  background: rgba(6, 78, 59, 0.22);
+}
+.vaq-name-card__badge {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #bbf7d0;
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  border-radius: 999px;
+  padding: 4px 8px;
+}

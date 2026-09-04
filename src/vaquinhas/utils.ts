@@ -26,3 +26,8 @@ export function vaquinhaPaidCents(v: Vaquinha) {
 export function vaquinhaPendingCents(v: Vaquinha) {
   return Math.max(0, v.totalCents - vaquinhaPaidCents(v));
 }
+export function isVaquinhaFinished(v: Vaquinha) {
+  if (!v.people.length) return false;
+  const allPaid = v.people.every((p) => p.status === "paid");
+  return allPaid && vaquinhaPendingCents(v) <= 0;
+}
