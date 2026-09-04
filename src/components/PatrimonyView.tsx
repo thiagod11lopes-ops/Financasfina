@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useFinance } from "../context/FinanceContext";
 import { DASH_TABS_SYNC_EVENT, loadDashboardTabs } from "../dashboardTabs";
-import { computeMonthDashboardBalance, formatBRL, formatMonthLabelPt, parseMoney } from "../utils/format";
+import { computeMonthDashboardBalance, formatBRL, formatMonthLabelPt, monthKey, parseMoney } from "../utils/format";
 import { IconChevronDown, IconEdit, IconTrash } from "./Icons";
 import type { PatrimonyAsset } from "../types";
 
@@ -94,11 +94,15 @@ function PatrimonyRow({
 
 export function PatrimonyView() {
   const { state, addPatrimonyAsset, updatePatrimonyAsset, removePatrimonyAsset } = useFinance();
-  const [activeMonth, setActiveMonth] = useState(() => loadDashboardTabs().active);
+  const [activeMonth, setActiveMonth] = useState(() => monthKey(new Date()));
   const [formOpen, setFormOpen] = useState(false);
   const [name, setName] = useState("");
   const [value, setValue] = useState("");
   const [notes, setNotes] = useState("");
+
+  useEffect(() => {
+    setActiveMonth(monthKey(new Date()));
+  }, []);
 
   useEffect(() => {
     const sync = () => setActiveMonth(loadDashboardTabs().active);

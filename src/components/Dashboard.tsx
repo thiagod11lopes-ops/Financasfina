@@ -81,8 +81,12 @@ export function Dashboard({ visible = true }: { visible?: boolean }) {
     addVariableSpend,
     addRecurringSpend,
   } = useFinance();
-  const [tabs, setTabs] = useState<string[]>(() => loadDashboardTabs().tabs);
-  const [activeKey, setActiveKey] = useState<string>(() => loadDashboardTabs().active);
+  const [tabs, setTabs] = useState<string[]>(() => {
+    const p = loadDashboardTabs();
+    const ym = monthKey(new Date());
+    return p.tabs.includes(ym) ? p.tabs : [...p.tabs, ym].sort();
+  });
+  const [activeKey, setActiveKey] = useState<string>(() => monthKey(new Date()));
   const [newMonth, setNewMonth] = useState(() => monthKey(new Date()));
   const [pickerOpen, setPickerOpen] = useState(false);
   const [agendaOpen, setAgendaOpen] = useState(false);
@@ -188,6 +192,12 @@ export function Dashboard({ visible = true }: { visible?: boolean }) {
   }, [visible]);
 
   useEffect(() => {
+    const ym = monthKey(new Date());
+    setActiveKey(ym);
+    setTabs((prev) => (prev.includes(ym) ? prev : [...prev, ym].sort()));
+  }, []);
+
+  useEffect(() => {
     const payload = { tabs, active: activeKey };
     saveDashboardTabs(payload);
     cloud.scheduleDashboardTabsPush(payload);
@@ -196,15 +206,17 @@ export function Dashboard({ visible = true }: { visible?: boolean }) {
   useEffect(() => {
     const sync = () => {
       const p = loadDashboardTabs();
-      setTabs(p.tabs);
-      setActiveKey(p.active);
+      const ym = monthKey(new Date());
+      setTabs(p.tabs.includes(ym) ? p.tabs : [...p.tabs, ym].sort());
     };
     window.addEventListener(DASH_TABS_SYNC_EVENT, sync);
     return () => window.removeEventListener(DASH_TABS_SYNC_EVENT, sync);
   }, []);
 
   useEffect(() => {
-    if (!tabs.includes(activeKey)) setActiveKey(tabs[0]!);
+    if (tabs.includes(activeKey)) return;
+    const ym = monthKey(new Date());
+    setActiveKey(tabs.includes(ym) ? ym : tabs[0]!);
   }, [tabs, activeKey]);
 
   const stats = useMemo(() => {

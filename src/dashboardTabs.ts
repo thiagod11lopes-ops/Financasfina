@@ -5,8 +5,6 @@ export const DASH_TABS_KEY = "financas-dashboard-month-tabs-v1";
 
 export const DASH_TABS_SYNC_EVENT = "financas-dashboard-tabs-sync";
 
-const LEGACY_DEFAULT_TAB = "2026-04";
-
 export type TabsPersist = {
   tabs: string[];
   active: string;
@@ -14,33 +12,48 @@ export type TabsPersist = {
 
 let memoryTabs: TabsPersist | null = null;
 
+/** Sempre o mês civil atual (YYYY-MM). */
+export function currentMonthTab(): string {
+  return monthKey(new Date());
+}
+
+export function defaultTabsPersist(): TabsPersist {
+  const ym = currentMonthTab();
+  return { tabs: [ym], active: ym };
+}
+
+/** Garante que o mês atual existe na lista; não força o active (usado ao sincronizar abas). */
+export function ensureCurrentMonthInTabs(data: TabsPersist): TabsPersist {
+  const ym = currentMonthTab();
+  const tabs = data.tabs.includes(ym) ? data.tabs : [...data.tabs, ym].sort();
+  const active = tabs.includes(data.active) ? data.active : ym;
+  return { tabs, active };
+}
+
 export function reviveDashboardTabsFromUnknown(raw: unknown): TabsPersist {
-  if (!raw || typeof raw !== "object") {
-    return { tabs: [LEGACY_DEFAULT_TAB], active: LEGACY_DEFAULT_TAB };
-  }
+  const fallback = defaultTabsPersist();
+  if (!raw || typeof raw !== "object") return fallback;
   try {
     const p = raw as Partial<TabsPersist>;
-    if (!Array.isArray(p.tabs) || p.tabs.length === 0) {
-      return { tabs: [LEGACY_DEFAULT_TAB], active: LEGACY_DEFAULT_TAB };
-    }
+    if (!Array.isArray(p.tabs) || p.tabs.length === 0) return fallback;
     const tabs = [...new Set(p.tabs.map(String))].sort();
     const active = typeof p.active === "string" && tabs.includes(p.active) ? p.active : tabs[0]!;
-    return { tabs, active };
+    return ensureCurrentMonthInTabs({ tabs, active });
   } catch {
-    return { tabs: [LEGACY_DEFAULT_TAB], active: LEGACY_DEFAULT_TAB };
+    return fallback;
   }
 }
 
 export function loadDashboardTabs(): TabsPersist {
   if (isCloudSessionActive()) {
-    return memoryTabs ? reviveDashboardTabsFromUnknown(memoryTabs) : { tabs: [LEGACY_DEFAULT_TAB], active: LEGACY_DEFAULT_TAB };
+    return memoryTabs ? reviveDashboardTabsFromUnknown(memoryTabs) : defaultTabsPersist();
   }
   try {
     const raw = localStorage.getItem(DASH_TABS_KEY);
-    if (!raw) return { tabs: [LEGACY_DEFAULT_TAB], active: LEGACY_DEFAULT_TAB };
+    if (!raw) return defaultTabsPersist();
     return reviveDashboardTabsFromUnknown(JSON.parse(raw));
   } catch {
-    return { tabs: [LEGACY_DEFAULT_TAB], active: LEGACY_DEFAULT_TAB };
+    return defaultTabsPersist();
   }
 }
 
@@ -60,7 +73,7 @@ export function removeMonthFromDashboardTabs(ym: string): void {
   const p = loadDashboardTabs();
   const tabs = p.tabs.filter((t) => t !== ym);
   if (tabs.length === 0) {
-    const fallback = monthKey(new Date());
+    const fallback = currentMonthTab();
     saveDashboardTabs({ tabs: [fallback], active: fallback });
     return;
   }
@@ -69,7 +82,7 @@ export function removeMonthFromDashboardTabs(ym: string): void {
 }
 
 export function resetDashboardTabsToCurrentMonth(): void {
-  const ym = monthKey(new Date());
+  const ym = currentMonthTab();
   saveDashboardTabs({ tabs: [ym], active: ym });
 }
 
