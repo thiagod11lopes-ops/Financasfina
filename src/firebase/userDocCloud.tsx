@@ -22,6 +22,10 @@ import { notifyUsersSync, saveUserRecords, sanitizeForCloudCompare, type UserRec
 import { reviveTasksFromUnknown, saveTasks } from "../tasks/persist";
 import type { TasksData } from "../tasks/types";
 import {
+  clearVaquinhasPending,
+  isVaquinhasDirty,
+  loadVaquinhas,
+  markVaquinhasDirty,
   reviveVaquinhasFromUnknown,
   saveVaquinhas,
 } from "../vaquinhas/storage";
@@ -48,6 +52,7 @@ type UserDocCloudApi = {
   scheduleUsersPush: (records: UserRecord[]) => void;
   scheduleTasksPush: (data: TasksData) => void;
   scheduleVaquinhasPush: (data: VaquinhasPersisted) => void;
+  pushVaquinhasImmediate: (data: VaquinhasPersisted) => void;
   scheduleShoppingListPrefsPush: (data: ShoppingListPrefsCloud) => void;
 };
 
@@ -59,6 +64,7 @@ const noopApi: UserDocCloudApi = {
   scheduleUsersPush: () => {},
   scheduleTasksPush: () => {},
   scheduleVaquinhasPush: () => {},
+  pushVaquinhasImmediate: () => {},
   scheduleShoppingListPrefsPush: () => {},
 };
 
@@ -77,24 +83,22 @@ function applyRemoteField(args: {
   const lastJson = lastJsonRef.current;
 
   if (timeMs < lastMs) return;
+  if (nextJson === lastJson) {
+    if (timeMs > lastMs) lastMsRef.current = timeMs;
+    return;
+  }
 
-  if (timeMs === lastMs && nextJson === lastJson) return;
-
+  /** Só ignora cache ambíguo depois de já termos um timestamp real do servidor. */
   if (
     timeMs === lastMs &&
-    nextJson !== lastJson &&
+    timeMs > 0 &&
     snap.metadata.fromCache &&
     !snap.metadata.hasPendingWrites
   ) {
     return;
   }
 
-  if (timeMs > lastMs && nextJson === lastJson) {
-    lastMsRef.current = timeMs;
-    return;
-  }
-
-  lastMsRef.current = timeMs;
+  lastMsRef.current = Math.max(timeMs, lastMs);
   lastJsonRef.current = nextJson;
   onApply();
 }
@@ -226,19 +230,37 @@ export function UserDocCloudProvider({ children }: { children: ReactNode }) {
         }
 
         if (data.vaquinhas != null && typeof data.vaquinhas === "object") {
-          const t = firestoreTimestampMs(data.vaquinhasUpdatedAt);
-          const vaquinhas = reviveVaquinhasFromUnknown(data.vaquinhas);
-          const json = JSON.stringify(vaquinhas);
-          applyRemoteField({
-            snap,
-            timeMs: t,
-            lastMsRef: lastVaquinhasMsRef,
-            lastJsonRef: lastVaquinhasJsonRef,
-            nextJson: json,
-            onApply: () => {
-              saveVaquinhas(vaquinhas);
-            },
-          });
+          if (!isVaquinhasDirty()) {
+            const t = firestoreTimestampMs(data.vaquinhasUpdatedAt);
+            const vaquinhas = reviveVaquinhasFromUnknown(data.vaquinhas);
+            const json = JSON.stringify(vaquinhas);
+            applyRemoteField({
+              snap,
+              timeMs: t,
+              lastMsRef: lastVaquinhasMsRef,
+              lastJsonRef: lastVaquinhasJsonRef,
+              nextJson: json,
+              onApply: () => {
+                saveVaquinhas(vaquinhas, { fromCloud: true });
+              },
+            });
+          }
+        } else if (!isVaquinhasDirty()) {
+          const localOrPending = loadVaquinhas();
+          if (localOrPending.items.length > 0) {
+            pendingVaquinhasRef.current = localOrPending;
+            void setDoc(
+              ref,
+              { vaquinhas: localOrPending, vaquinhasUpdatedAt: serverTimestamp() },
+              { merge: true },
+            )
+              .then(() => {
+                markVaquinhasDirty(false);
+                clearVaquinhasPending();
+                lastVaquinhasJsonRef.current = JSON.stringify(localOrPending);
+              })
+              .catch((err) => console.error("[UserDoc vaquinhas pending]", err));
+          }
         }
 
         if (data.shoppingListPrefs != null && typeof data.shoppingListPrefs === "object") {
@@ -348,7 +370,13 @@ export function UserDocCloudProvider({ children }: { children: ReactNode }) {
     if (!app) return;
     const db = getFirestore(app);
     const ref = doc(db, "userFinances", fbUser.uid);
-    void setDoc(ref, { vaquinhas: data, vaquinhasUpdatedAt: serverTimestamp() }, { merge: true });
+    void setDoc(ref, { vaquinhas: data, vaquinhasUpdatedAt: serverTimestamp() }, { merge: true })
+      .then(() => {
+        markVaquinhasDirty(false);
+        clearVaquinhasPending();
+        saveVaquinhas(data, { silent: true, fromCloud: true });
+      })
+      .catch((err) => console.error("[UserDoc vaquinhas push]", err));
   }, [fbConfigured, authReady, fbUser]);
 
   const flushShopping = useCallback(() => {
@@ -442,7 +470,16 @@ export function UserDocCloudProvider({ children }: { children: ReactNode }) {
       vaquinhasPushTimer.current = window.setTimeout(() => {
         vaquinhasPushTimer.current = null;
         flushVaquinhas();
-      }, 450);
+      }, 120);
+    },
+    [fbConfigured, authReady, fbUser, flushVaquinhas],
+  );
+
+  const pushVaquinhasImmediate = useCallback(
+    (data: VaquinhasPersisted) => {
+      if (!fbConfigured || !authReady || !fbUser) return;
+      pendingVaquinhasRef.current = data;
+      flushVaquinhas();
     },
     [fbConfigured, authReady, fbUser, flushVaquinhas],
   );
@@ -492,6 +529,7 @@ export function UserDocCloudProvider({ children }: { children: ReactNode }) {
             scheduleUsersPush,
             scheduleTasksPush,
             scheduleVaquinhasPush,
+            pushVaquinhasImmediate,
             scheduleShoppingListPrefsPush,
           }
         : noopApi,
@@ -505,6 +543,7 @@ export function UserDocCloudProvider({ children }: { children: ReactNode }) {
       scheduleUsersPush,
       scheduleTasksPush,
       scheduleVaquinhasPush,
+      pushVaquinhasImmediate,
       scheduleShoppingListPrefsPush,
     ],
   );

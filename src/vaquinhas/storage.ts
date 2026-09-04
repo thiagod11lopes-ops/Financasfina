@@ -4,10 +4,12 @@ import { isCloudSessionActive } from "../storage/cloudSession";
 const KEY = "vaquinhas:v4";
 const KEY_V3 = "vaquinhas:v3";
 const KEY_V2 = "vaquinhas:v2";
+const PENDING_KEY = "vaquinhas-cloud-pending";
 
 export const VAQUINHAS_SYNC_EVENT = "financas-vaquinhas-sync";
 
 let memoryVaquinhas: VaquinhasPersisted | null = null;
+let dirtyVaquinhas = false;
 
 function nowYear() {
   return new Date().getFullYear();
@@ -117,11 +119,52 @@ export function reviveVaquinhasFromUnknown(parsed: unknown): VaquinhasPersisted 
   }
 }
 
+function readPending(): VaquinhasPersisted | null {
+  if (typeof sessionStorage === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(PENDING_KEY);
+    if (!raw) return null;
+    const parsed = reviveVaquinhasFromUnknown(JSON.parse(raw));
+    return parsed.items.length ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePending(p: VaquinhasPersisted): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(PENDING_KEY, JSON.stringify({ version: 4, items: p.items }));
+  } catch {
+    /* quota */
+  }
+}
+
+export function clearVaquinhasPending(): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.removeItem(PENDING_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function isVaquinhasDirty(): boolean {
+  return dirtyVaquinhas;
+}
+
+export function markVaquinhasDirty(dirty: boolean): void {
+  dirtyVaquinhas = dirty;
+}
+
 export function loadVaquinhas(): VaquinhasPersisted {
   if (isCloudSessionActive()) {
-    return memoryVaquinhas
-      ? reviveVaquinhasFromUnknown(memoryVaquinhas)
-      : { version: 4, items: [] };
+    if (memoryVaquinhas?.items?.length) {
+      return reviveVaquinhasFromUnknown(memoryVaquinhas);
+    }
+    const pending = readPending();
+    if (pending) return pending;
+    return { version: 4, items: [] };
   }
   try {
     const raw = localStorage.getItem(KEY);
@@ -139,12 +182,27 @@ export function loadVaquinhas(): VaquinhasPersisted {
   }
 }
 
-export function saveVaquinhas(p: VaquinhasPersisted, opts?: { silent?: boolean }) {
-  const normalized = { version: 4 as const, items: p.items };
+export function saveVaquinhas(
+  p: VaquinhasPersisted,
+  opts?: { silent?: boolean; fromCloud?: boolean },
+): void {
+  const normalized = reviveVaquinhasFromUnknown({ version: 4, items: p.items });
   memoryVaquinhas = normalized;
-  if (!isCloudSessionActive()) {
-    localStorage.setItem(KEY, JSON.stringify(normalized));
+
+  if (opts?.fromCloud) {
+    dirtyVaquinhas = false;
+    clearVaquinhasPending();
+  } else if (isCloudSessionActive()) {
+    dirtyVaquinhas = true;
+    writePending(normalized);
+  } else {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(normalized));
+    } catch {
+      /* quota */
+    }
   }
+
   if (!opts?.silent) {
     window.dispatchEvent(new Event(VAQUINHAS_SYNC_EVENT));
   }
@@ -152,4 +210,5 @@ export function saveVaquinhas(p: VaquinhasPersisted, opts?: { silent?: boolean }
 
 export function clearVaquinhasMemory(): void {
   memoryVaquinhas = null;
+  dirtyVaquinhas = false;
 }

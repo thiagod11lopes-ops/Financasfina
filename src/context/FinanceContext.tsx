@@ -72,8 +72,9 @@ function loadState(): AppState {
   }
 }
 
-function clearAllDomainMemory(): void {
+function clearAllDomainMemory(opts?: { wipeCloudMirrors?: boolean }): void {
   clearLocalAppData();
+  if (!opts?.wipeCloudMirrors) return;
   clearAgendaMemory();
   clearTasksMemory();
   clearVaquinhasMemory();
@@ -311,7 +312,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
     if (!fbUser?.uid) {
       setCloudSessionActive(false);
-      clearAllDomainMemory();
+      clearAllDomainMemory({ wipeCloudMirrors: true });
       stateRef.current = emptyFinanceState();
       setState(emptyFinanceState());
       return;

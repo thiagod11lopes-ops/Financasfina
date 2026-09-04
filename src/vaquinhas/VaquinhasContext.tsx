@@ -8,7 +8,12 @@ import type {
   VaquinhasPersisted,
 } from "./types";
 import { uid } from "./utils";
-import { loadVaquinhas, saveVaquinhas, VAQUINHAS_SYNC_EVENT } from "./storage";
+import {
+  loadVaquinhas,
+  markVaquinhasDirty,
+  saveVaquinhas,
+  VAQUINHAS_SYNC_EVENT,
+} from "./storage";
 
 type VaquinhasCtx = {
   items: Vaquinha[];
@@ -37,31 +42,49 @@ export function useVaquinhas() {
 export function VaquinhasProvider({ children }: { children: React.ReactNode }) {
   const cloud = useUserDocCloud();
   const [items, setItems] = useState<Vaquinha[]>(() => loadVaquinhas().items);
-  const hydratedRef = useRef(false);
-  const applyingRemoteRef = useRef(false);
+  const skipPushRef = useRef(true);
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
 
   useEffect(() => {
     const sync = () => {
-      applyingRemoteRef.current = true;
+      skipPushRef.current = true;
       setItems(loadVaquinhas().items);
     };
     window.addEventListener(VAQUINHAS_SYNC_EVENT, sync);
     return () => window.removeEventListener(VAQUINHAS_SYNC_EVENT, sync);
   }, []);
 
+  const persistAndPush = useCallback(
+    (next: Vaquinha[], immediate = false) => {
+      const p: VaquinhasPersisted = { version: 4, items: next };
+      saveVaquinhas(p, { silent: true });
+      markVaquinhasDirty(true);
+      if (immediate) cloud.pushVaquinhasImmediate(p);
+      else cloud.scheduleVaquinhasPush(p);
+    },
+    [cloud],
+  );
+
   useEffect(() => {
-    const p: VaquinhasPersisted = { version: 4, items };
-    saveVaquinhas(p, { silent: true });
-    if (!hydratedRef.current) {
-      hydratedRef.current = true;
+    if (skipPushRef.current) {
+      skipPushRef.current = false;
       return;
     }
-    if (applyingRemoteRef.current) {
-      applyingRemoteRef.current = false;
-      return;
-    }
-    cloud.scheduleVaquinhasPush(p);
-  }, [items, cloud]);
+    persistAndPush(items, false);
+  }, [items, persistAndPush]);
+
+  useEffect(() => {
+    const flush = () => {
+      persistAndPush(itemsRef.current, true);
+    };
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("beforeunload", flush);
+    };
+  }, [persistAndPush]);
 
   const createVaquinha = useCallback((input: VaquinhaInput) => {
     const name = input.name.trim();
