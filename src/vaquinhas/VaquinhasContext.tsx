@@ -1,21 +1,18 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import type { PersonStatus, Vaquinha, VaquinhaPerson, VaquinhasPersisted } from "./types";
+import type {
+  PersonStatus,
+  Vaquinha,
+  VaquinhaInput,
+  VaquinhaPerson,
+  VaquinhasPersisted,
+} from "./types";
 import { uid } from "./utils";
 import { loadVaquinhas, saveVaquinhas } from "./storage";
 
-type CreateInput = {
-  name: string;
-  totalCents: number;
-  perPersonCents: number;
-};
-
 type VaquinhasCtx = {
   items: Vaquinha[];
-  createVaquinha: (input: CreateInput) => string | null;
-  updateVaquinha: (
-    id: string,
-    patch: Partial<Pick<Vaquinha, "name" | "totalCents" | "perPersonCents">>,
-  ) => void;
+  createVaquinha: (input: VaquinhaInput) => string | null;
+  updateVaquinha: (id: string, patch: Partial<VaquinhaInput>) => void;
   deleteVaquinha: (id: string) => void;
   addPerson: (vaquinhaId: string, name: string) => void;
   updatePerson: (
@@ -40,13 +37,17 @@ export function VaquinhasProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<Vaquinha[]>(() => loadVaquinhas().items);
 
   useEffect(() => {
-    const p: VaquinhasPersisted = { version: 3, items };
+    const p: VaquinhasPersisted = { version: 4, items };
     saveVaquinhas(p);
   }, [items]);
 
-  const createVaquinha = useCallback((input: CreateInput) => {
+  const createVaquinha = useCallback((input: VaquinhaInput) => {
     const name = input.name.trim();
     if (!name || input.totalCents <= 0 || input.perPersonCents <= 0) return null;
+    if (input.period.kind === "range") {
+      if (!input.period.startDateIso || !input.period.endDateIso) return null;
+      if (input.period.endDateIso < input.period.startDateIso) return null;
+    }
     const id = uid("vaq");
     setItems((prev) => [
       ...prev,
@@ -55,6 +56,7 @@ export function VaquinhasProvider({ children }: { children: React.ReactNode }) {
         name,
         totalCents: input.totalCents,
         perPersonCents: input.perPersonCents,
+        period: input.period,
         people: [],
         createdAtIso: new Date().toISOString(),
       },
@@ -62,21 +64,23 @@ export function VaquinhasProvider({ children }: { children: React.ReactNode }) {
     return id;
   }, []);
 
-  const updateVaquinha = useCallback(
-    (id: string, patch: Partial<Pick<Vaquinha, "name" | "totalCents" | "perPersonCents">>) => {
-      setItems((prev) =>
-        prev.map((v) => {
-          if (v.id !== id) return v;
-          const next = { ...v, ...patch };
-          if (typeof next.name === "string") next.name = next.name.trim() || v.name;
-          if (next.totalCents < 0) next.totalCents = 0;
-          if (next.perPersonCents < 0) next.perPersonCents = 0;
-          return next;
-        }),
-      );
-    },
-    [],
-  );
+  const updateVaquinha = useCallback((id: string, patch: Partial<VaquinhaInput>) => {
+    setItems((prev) =>
+      prev.map((v) => {
+        if (v.id !== id) return v;
+        const next: Vaquinha = {
+          ...v,
+          ...(patch.name != null ? { name: patch.name.trim() || v.name } : {}),
+          ...(patch.totalCents != null ? { totalCents: Math.max(0, patch.totalCents) } : {}),
+          ...(patch.perPersonCents != null
+            ? { perPersonCents: Math.max(0, patch.perPersonCents) }
+            : {}),
+          ...(patch.period != null ? { period: patch.period } : {}),
+        };
+        return next;
+      }),
+    );
+  }, []);
 
   const deleteVaquinha = useCallback((id: string) => {
     setItems((prev) => prev.filter((x) => x.id !== id));

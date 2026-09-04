@@ -1,67 +1,57 @@
-import type { Vaquinha, VaquinhasPersisted } from "./types";
+import type { Vaquinha, VaquinhaPeriod, VaquinhasPersisted } from "./types";
 
-const KEY = "vaquinhas:v3";
+const KEY = "vaquinhas:v4";
+const KEY_V3 = "vaquinhas:v3";
 const KEY_V2 = "vaquinhas:v2";
-const KEY_V1 = "vaquinhas:v1";
 
-function migrateFromV2(): Vaquinha[] {
+function defaultPeriod(): VaquinhaPeriod {
+  return { kind: "monthly" };
+}
+
+function withPeriod(v: Omit<Vaquinha, "period"> & { period?: VaquinhaPeriod }): Vaquinha {
+  return {
+    ...v,
+    period: v.period ?? defaultPeriod(),
+    people: v.people ?? [],
+  };
+}
+
+function migrateFromV3(): Vaquinha[] {
   try {
-    const raw = localStorage.getItem(KEY_V2);
+    const raw = localStorage.getItem(KEY_V3);
     if (!raw) return [];
-    const parsed = JSON.parse(raw) as {
-      items?: Array<{
-        id: string;
-        name: string;
-        expectedCents?: number;
-        paidCents?: number;
-        createdAtIso?: string;
-      }>;
-    };
-    return (parsed.items ?? []).map((v) => ({
-      id: v.id,
-      name: v.name,
-      totalCents: v.expectedCents ?? 0,
-      perPersonCents: 0,
-      people: [],
-      createdAtIso: v.createdAtIso ?? new Date().toISOString(),
-    }));
+    const parsed = JSON.parse(raw) as { items?: Array<any> };
+    return (parsed.items ?? []).map((v) =>
+      withPeriod({
+        id: v.id,
+        name: v.name,
+        totalCents: v.totalCents ?? 0,
+        perPersonCents: v.perPersonCents ?? 0,
+        people: v.people ?? [],
+        createdAtIso: v.createdAtIso ?? new Date().toISOString(),
+        period: v.period,
+      }),
+    );
   } catch {
     return [];
   }
 }
 
-function migrateFromV1(): Vaquinha[] {
+function migrateFromV2(): Vaquinha[] {
   try {
-    const raw = localStorage.getItem(KEY_V1);
+    const raw = localStorage.getItem(KEY_V2);
     if (!raw) return [];
-    const parsed = JSON.parse(raw) as {
-      items?: Array<{
-        id: string;
-        name: string;
-        createdAtIso?: string;
-        titles?: Array<{ payerName?: string; amountCents?: number; status?: string }>;
-      }>;
-    };
-    return (parsed.items ?? []).map((v) => {
-      const total = (v.titles ?? []).reduce((a, t) => a + (t.amountCents || 0), 0);
-      const people = (v.titles ?? []).map((t, i) => ({
-        id: `migrated_${v.id}_${i}`,
-        name: t.payerName?.trim() || `Pessoa ${i + 1}`,
-        status: (t.status === "paid" ? "paid" : "pending") as "paid" | "pending",
-      }));
-      const perPerson =
-        people.length > 0
-          ? Math.round(total / people.length)
-          : 0;
-      return {
+    const parsed = JSON.parse(raw) as { items?: Array<any> };
+    return (parsed.items ?? []).map((v) =>
+      withPeriod({
         id: v.id,
         name: v.name,
-        totalCents: total,
-        perPersonCents: perPerson,
-        people,
+        totalCents: v.expectedCents ?? 0,
+        perPersonCents: 0,
+        people: [],
         createdAtIso: v.createdAtIso ?? new Date().toISOString(),
-      };
-    });
+      }),
+    );
   } catch {
     return [];
   }
@@ -72,13 +62,15 @@ export function loadVaquinhas(): VaquinhasPersisted {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as VaquinhasPersisted;
-      if (parsed?.version === 3 && Array.isArray(parsed.items)) return parsed;
+      if (parsed?.version === 4 && Array.isArray(parsed.items)) {
+        return { version: 4, items: parsed.items.map((v) => withPeriod(v)) };
+      }
     }
-    const fromV2 = migrateFromV2();
-    if (fromV2.length) return { version: 3, items: fromV2 };
-    return { version: 3, items: migrateFromV1() };
+    const fromV3 = migrateFromV3();
+    if (fromV3.length) return { version: 4, items: fromV3 };
+    return { version: 4, items: migrateFromV2() };
   } catch {
-    return { version: 3, items: [] };
+    return { version: 4, items: [] };
   }
 }
 

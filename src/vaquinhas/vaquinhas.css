@@ -472,3 +472,89 @@
   display: grid;
   place-items: center;
 }
+
+.vaq-dash__open {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  padding: 0;
+  min-width: 0;
+  flex: 1;
+}
+.vaq-dash__body {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  width: 100%;
+  text-align: left;
+  padding: 0;
+  margin-top: 2px;
+}
+.vaq-dash__actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.vaq-dash__period {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  font-weight: 600;
+}
+.vaq-dash__period--block {
+  margin: 0 0 10px;
+  position: relative;
+}
+.vaq-name-card__main {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+.vaq-period {
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 16px;
+  padding: 12px;
+  margin: 0;
+}
+.vaq-period legend {
+  padding: 0 6px;
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+.vaq-period__kinds {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.vaq-period__chip {
+  appearance: none;
+  min-height: 40px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(2,6,23,.45);
+  color: #cbd5e1;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0 8px;
+}
+.vaq-period__chip.is-on {
+  border-color: rgba(34,211,238,.45);
+  background: linear-gradient(135deg, rgba(167,139,250,.25), rgba(34,211,238,.22));
+  color: #e0f2fe;
+}
+.vaq-period__dates {
+  display: grid;
+  gap: 10px;
+}

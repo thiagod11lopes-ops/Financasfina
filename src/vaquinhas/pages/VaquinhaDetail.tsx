@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useVaquinhas } from "../VaquinhasContext";
-import { formatMoneyBRLFromCents, vaquinhaPaidCents, vaquinhaPendingCents } from "../utils";
+import { formatMoneyBRLFromCents, formatPeriodLabel, vaquinhaPaidCents, vaquinhaPendingCents } from "../utils";
 import { ConfirmModal } from "../components/ConfirmModal";
 
 export function VaquinhaDetail() {
@@ -34,7 +34,7 @@ export function VaquinhaDetail() {
   if (!vaquinha) {
     return (
       <div className="vaq-page">
-        <p className="vaq-empty">Vaquinha não encontrada.</p>
+        <p className="vaq-empty">Vaquinha nÃ£o encontrada.</p>
         <Link className="vaq-back" to="/vaquinhas">
           Voltar
         </Link>
@@ -69,6 +69,7 @@ export function VaquinhaDetail() {
       </div>
 
       <section className="vaq-dash vaq-dash--compact" aria-label="Resumo">
+        <p className="vaq-dash__period vaq-dash__period--block">{formatPeriodLabel(vaquinha.period)}</p>
         <div className="vaq-meta-row">
           <div>
             <span className="vaq-total__label">Total</span>
@@ -143,7 +144,7 @@ export function VaquinhaDetail() {
                 <h3 className="vaq-person__name">{p.name}</h3>
               )}
 
-              <div className="vaq-check-group" role="radiogroup" aria-label={`Situação de ${p.name}`}>
+              <div className="vaq-check-group" role="radiogroup" aria-label={`SituaÃ§Ã£o de ${p.name}`}>
                 <button
                   type="button"
                   role="radio"
