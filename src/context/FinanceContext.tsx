@@ -29,6 +29,7 @@ import {
 } from "../finance/cloudPersist";
 import { useAuth } from "../firebase/AuthProvider";
 import { getFirebaseApp } from "../firebase/config";
+import { FINANCES_CLOUD_WIPE_EVENT } from "../firebase/cloudEvents";
 import type {
   AppState,
   FixedAccount,
@@ -885,11 +886,30 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const resetAllData = useCallback(() => {
+    skipNextFinancePersistRef.current = true;
     localEntityBirthRef.current.clear();
-    allowEmptyCloudWriteRef.current = true;
-    dirtyRef.current = true;
-    setState({ ...FINANCES_EMPTY_STATE });
-  }, []);
+    allowEmptyCloudWriteRef.current = false;
+    dirtyRef.current = false;
+    const empty = { ...FINANCES_EMPTY_STATE };
+    const emptyJson = JSON.stringify(empty);
+    lastPayloadRemoteJsonRef.current = emptyJson;
+    lastPayloadWriteSeqRef.current = Math.max(lastPayloadWriteSeqRef.current + 1, Date.now());
+    stateRef.current = empty;
+    setState(empty);
+    if (fbUser?.uid) clearPendingCloudPayload(fbUser.uid);
+  }, [fbUser?.uid]);
+
+  useEffect(() => {
+    const onWipe = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ writeSeq?: number }>).detail;
+      if (typeof detail?.writeSeq === "number" && Number.isFinite(detail.writeSeq)) {
+        lastPayloadWriteSeqRef.current = Math.max(lastPayloadWriteSeqRef.current, detail.writeSeq);
+      }
+      resetAllData();
+    };
+    window.addEventListener(FINANCES_CLOUD_WIPE_EVENT, onWipe);
+    return () => window.removeEventListener(FINANCES_CLOUD_WIPE_EVENT, onWipe);
+  }, [resetAllData]);
 
   const addFutureIncome = useCallback(
     (e: Omit<FutureIncomeEntry, "id" | "received" | "receivedAt" | "linkedMovementId">) => {

@@ -11,8 +11,9 @@ import {
 import type { DocumentSnapshot } from "firebase/firestore";
 import { doc, getFirestore, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import type { AgendaData } from "../agenda/types";
-import { reviveAgendaFromUnknown, saveAgenda } from "../agenda/persist";
+import { clearAgendaMemory, reviveAgendaFromUnknown, saveAgenda } from "../agenda/persist";
 import {
+  defaultTabsPersist,
   ensureCurrentMonthInTabs,
   loadDashboardTabs,
   mergeTabsWithMonths,
@@ -21,16 +22,31 @@ import {
   saveDashboardTabs,
   type TabsPersist,
 } from "../dashboardTabs";
-import { notifyUsersSync, saveUserRecords, sanitizeForCloudCompare, type UserRecord } from "../users";
-import { reviveTasksFromUnknown, saveTasks } from "../tasks/persist";
+import { clearPendingCloudPayload, normalizeFinancePayload } from "../finance/cloudPersist";
+import { FINANCES_EMPTY_STATE } from "../finance/reviveAppState";
+import {
+  notifyUsersSync,
+  saveUserRecords,
+  sanitizeForCloudCompare,
+  USERS_ALL_OPTION,
+  type UserRecord,
+} from "../users";
+import {
+  clearTasksMemory,
+  reviveTasksFromUnknown,
+  saveTasks,
+  TASKS_SYNC_EVENT,
+} from "../tasks/persist";
 import type { TasksData } from "../tasks/types";
 import {
+  clearVaquinhasMemory,
   clearVaquinhasPending,
   isVaquinhasDirty,
   loadVaquinhas,
   markVaquinhasDirty,
   reviveVaquinhasFromUnknown,
   saveVaquinhas,
+  VAQUINHAS_SYNC_EVENT,
 } from "../vaquinhas/storage";
 import type { VaquinhasPersisted } from "../vaquinhas/types";
 import {
@@ -42,9 +58,10 @@ import {
 } from "../shoppingList/syncPrefs";
 import { useAuth } from "./AuthProvider";
 import { getFirebaseApp } from "./config";
+import { AGENDA_CLOUD_SYNC_EVENT, FINANCES_CLOUD_WIPE_EVENT } from "./cloudEvents";
 import { firestoreTimestampMs } from "./firestoreTime";
 
-export const AGENDA_CLOUD_SYNC_EVENT = "financas-agenda-cloud-sync";
+export { AGENDA_CLOUD_SYNC_EVENT, FINANCES_CLOUD_WIPE_EVENT } from "./cloudEvents";
 
 type UserDocCloudApi = {
   cloudEnabled: boolean;
@@ -57,6 +74,8 @@ type UserDocCloudApi = {
   scheduleVaquinhasPush: (data: VaquinhasPersisted) => void;
   pushVaquinhasImmediate: (data: VaquinhasPersisted) => void;
   scheduleShoppingListPrefsPush: (data: ShoppingListPrefsCloud) => void;
+  /** Substitui o documento Firestore por estado vazio (apaga de verdade na nuvem). */
+  wipeAllUserData: () => Promise<void>;
 };
 
 const noopApi: UserDocCloudApi = {
@@ -69,6 +88,7 @@ const noopApi: UserDocCloudApi = {
   scheduleVaquinhasPush: () => {},
   pushVaquinhasImmediate: () => {},
   scheduleShoppingListPrefsPush: () => {},
+  wipeAllUserData: async () => {},
 };
 
 const UserDocCloudContext = createContext<UserDocCloudApi>(noopApi);
@@ -514,6 +534,119 @@ export function UserDocCloudProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener(SHOPPING_LIST_PREFS_SYNC_EVENT, onPrefs);
   }, [fbConfigured, authReady, fbUser, scheduleShoppingListPrefsPush]);
 
+  const wipeAllUserData = useCallback(async () => {
+    if (!fbConfigured || !authReady || !fbUser) {
+      throw new Error("Login necessário para apagar dados na nuvem.");
+    }
+    const app = getFirebaseApp();
+    if (!app) throw new Error("Firebase indisponível.");
+
+    if (agendaPushTimer.current) {
+      window.clearTimeout(agendaPushTimer.current);
+      agendaPushTimer.current = null;
+    }
+    if (tabsPushTimer.current) {
+      window.clearTimeout(tabsPushTimer.current);
+      tabsPushTimer.current = null;
+    }
+    if (usersPushTimer.current) {
+      window.clearTimeout(usersPushTimer.current);
+      usersPushTimer.current = null;
+    }
+    if (tasksPushTimer.current) {
+      window.clearTimeout(tasksPushTimer.current);
+      tasksPushTimer.current = null;
+    }
+    if (vaquinhasPushTimer.current) {
+      window.clearTimeout(vaquinhasPushTimer.current);
+      vaquinhasPushTimer.current = null;
+    }
+    if (shoppingPushTimer.current) {
+      window.clearTimeout(shoppingPushTimer.current);
+      shoppingPushTimer.current = null;
+    }
+    pendingAgendaRef.current = null;
+    pendingTabsRef.current = null;
+    pendingUsersRef.current = null;
+    pendingTasksRef.current = null;
+    pendingVaquinhasRef.current = null;
+    pendingShoppingRef.current = null;
+
+    const emptyPayload = normalizeFinancePayload({ ...FINANCES_EMPTY_STATE });
+    const emptyAgenda = reviveAgendaFromUnknown(null);
+    const emptyTabs = defaultTabsPersist();
+    const emptyUsers: UserRecord[] = [{ name: USERS_ALL_OPTION }];
+    const emptyTasks = reviveTasksFromUnknown(null);
+    const emptyVaquinhas = reviveVaquinhasFromUnknown(null);
+    const emptyShopping: ShoppingListPrefsCloud = {
+      ativo: false,
+      roomHash: null,
+      accountEmail: null,
+    };
+    const wipeSeq = Date.now();
+
+    const db = getFirestore(app);
+    const ref = doc(db, "userFinances", fbUser.uid);
+
+    /** Sem merge: substitui o documento inteiro (não deixa campos antigos). */
+    await setDoc(ref, {
+      version: 1,
+      payload: emptyPayload,
+      updatedAt: serverTimestamp(),
+      payloadUpdatedAt: serverTimestamp(),
+      payloadWriteSeq: wipeSeq,
+      agenda: emptyAgenda,
+      agendaUpdatedAt: serverTimestamp(),
+      dashboardTabs: emptyTabs,
+      dashboardTabsUpdatedAt: serverTimestamp(),
+      usersPayload: { version: 2 as const, users: emptyUsers },
+      usersUpdatedAt: serverTimestamp(),
+      tasks: emptyTasks,
+      tasksUpdatedAt: serverTimestamp(),
+      vaquinhas: emptyVaquinhas,
+      vaquinhasUpdatedAt: serverTimestamp(),
+      shoppingListPrefs: emptyShopping,
+      shoppingListPrefsUpdatedAt: serverTimestamp(),
+    });
+
+    clearPendingCloudPayload(fbUser.uid);
+    clearVaquinhasPending();
+    markVaquinhasDirty(false);
+
+    clearAgendaMemory();
+    clearTasksMemory();
+    clearVaquinhasMemory();
+    saveAgenda(emptyAgenda);
+    saveDashboardTabs(emptyTabs);
+    saveUserRecords(emptyUsers);
+    saveTasks(emptyTasks);
+    saveVaquinhas(emptyVaquinhas, { fromCloud: true });
+    applyShoppingListPrefsFromCloud(emptyShopping);
+
+    lastAgendaJsonRef.current = JSON.stringify(emptyAgenda);
+    lastTabsJsonRef.current = JSON.stringify(emptyTabs);
+    lastUsersJsonRef.current = sanitizeForCloudCompare(emptyUsers);
+    lastTasksJsonRef.current = JSON.stringify(emptyTasks);
+    lastVaquinhasJsonRef.current = JSON.stringify(emptyVaquinhas);
+    lastShoppingJsonRef.current = JSON.stringify(emptyShopping);
+    lastAgendaMsRef.current = wipeSeq;
+    lastTabsMsRef.current = wipeSeq;
+    lastUsersMsRef.current = wipeSeq;
+    lastTasksMsRef.current = wipeSeq;
+    lastVaquinhasMsRef.current = wipeSeq;
+    lastShoppingMsRef.current = wipeSeq;
+
+    window.dispatchEvent(new Event(AGENDA_CLOUD_SYNC_EVENT));
+    notifyDashboardTabsSync();
+    notifyUsersSync();
+    window.dispatchEvent(new Event(TASKS_SYNC_EVENT));
+    window.dispatchEvent(new Event(VAQUINHAS_SYNC_EVENT));
+    window.dispatchEvent(new Event(SHOPPING_LIST_PREFS_SYNC_EVENT));
+    window.dispatchEvent(
+      new CustomEvent(FINANCES_CLOUD_WIPE_EVENT, { detail: { writeSeq: wipeSeq } }),
+    );
+  }, [fbConfigured, authReady, fbUser]);
+
   useEffect(
     () => () => {
       if (agendaPushTimer.current) window.clearTimeout(agendaPushTimer.current);
@@ -539,6 +672,7 @@ export function UserDocCloudProvider({ children }: { children: ReactNode }) {
             scheduleVaquinhasPush,
             pushVaquinhasImmediate,
             scheduleShoppingListPrefsPush,
+            wipeAllUserData,
           }
         : noopApi,
     [
@@ -553,6 +687,7 @@ export function UserDocCloudProvider({ children }: { children: ReactNode }) {
       scheduleVaquinhasPush,
       pushVaquinhasImmediate,
       scheduleShoppingListPrefsPush,
+      wipeAllUserData,
     ],
   );
 

@@ -76,11 +76,23 @@ export function SettingsView({ visible = true }: { visible?: boolean }) {
   );
 
   const handleWipeAll = useCallback(() => {
-    resetAllData();
-    resetDashboardTabsToCurrentMonth();
-    notifyDashboardTabsSync();
-    cloud.scheduleDashboardTabsPush(loadDashboardTabs());
-    setWipeStep(0);
+    void (async () => {
+      try {
+        if (cloud.cloudEnabled) {
+          await cloud.wipeAllUserData();
+        } else {
+          resetAllData();
+          resetDashboardTabsToCurrentMonth();
+          notifyDashboardTabsSync();
+        }
+        setWipeStep(0);
+      } catch (err) {
+        console.error("[Settings] wipe cloud", err);
+        window.alert(
+          "Não foi possível apagar os dados no Firebase. Verifique a internet e tente de novo (é preciso estar logado).",
+        );
+      }
+    })();
   }, [resetAllData, cloud]);
 
   const handleAddUser = useCallback(() => {
@@ -259,8 +271,9 @@ export function SettingsView({ visible = true }: { visible?: boolean }) {
       <div className="card settings-card settings-danger-card">
         <h3 className="settings-section-title settings-danger-title">Zona de perigo</h3>
         <p className="settings-muted">
-          Excluir tudo apaga permanentemente fluxo de caixa, contas fixas, contas variáveis (e seus gastos),
-          supermercado, combustível e entradas futuras. As abas do resumo voltam só ao mês atual.
+          Excluir tudo apaga permanentemente no Firebase (e neste aparelho): fluxo de caixa, contas, supermercado,
+          combustível, entradas futuras, agenda, tarefas, vaquinhas e preferências da lista. As abas do resumo voltam
+          só ao mês atual. Limpar dados do navegador sozinho não remove o Firestore.
         </p>
         {wipeStep === 0 ? (
           <button type="button" className="settings-btn settings-btn--danger-ghost" onClick={() => setWipeStep(1)}>
