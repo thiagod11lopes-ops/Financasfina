@@ -8,31 +8,21 @@ import {
   vaquinhaPendingCents,
 } from "../utils";
 import { CreateVaquinhaModal } from "../components/CreateVaquinhaModal";
-import type { Vaquinha } from "../types";
-
-function summarize(list: Vaquinha[]) {
-  const expected = list.reduce((a, v) => a + v.totalCents, 0);
-  const paid = list.reduce((a, v) => a + vaquinhaPaidCents(v), 0);
-  const pending = list.reduce((a, v) => a + vaquinhaPendingCents(v), 0);
-  return { expected, paid, pending, count: list.length };
-}
 
 export function Dashboard() {
   const { items, createVaquinha } = useVaquinhas();
   const [createOpen, setCreateOpen] = useState(false);
+  const [finishedOpen, setFinishedOpen] = useState(false);
 
   const { active, finished } = useMemo(() => {
-    const activeList: Vaquinha[] = [];
-    const finishedList: Vaquinha[] = [];
+    const activeList = [];
+    const finishedList = [];
     for (const v of items) {
       if (isVaquinhaFinished(v)) finishedList.push(v);
       else activeList.push(v);
     }
     return { active: activeList, finished: finishedList };
   }, [items]);
-
-  const activeTotals = useMemo(() => summarize(active), [active]);
-  const finishedTotals = useMemo(() => summarize(finished), [finished]);
 
   const goHome = () => {
     const base = import.meta.env.BASE_URL || "/";
@@ -48,87 +38,69 @@ export function Dashboard() {
           Voltar
         </button>
         <h1 className="vaq-title">Vaquinhas</h1>
-        <span className="vaq-top__spacer" aria-hidden />
+        {finished.length > 0 ? (
+          <button
+            type="button"
+            className="vaq-icon-btn vaq-finished-btn"
+            onClick={() => setFinishedOpen(true)}
+            aria-label={`Ver ${finished.length} vaquinhas finalizadas`}
+            title="Finalizadas"
+          >
+            <ArchiveIcon />
+            <span className="vaq-finished-btn__badge">{finished.length}</span>
+          </button>
+        ) : (
+          <span className="vaq-top__spacer" aria-hidden />
+        )}
       </div>
 
-      <section className="vaq-dash" aria-label="Dashboard em andamento">
-        <div className="vaq-dash__glow" aria-hidden />
-        <div className="vaq-dash__head">
-          <p className="vaq-dash__eyebrow">Em andamento</p>
-          <span className="vaq-dash__count">{activeTotals.count}</span>
-        </div>
-        <div className="vaq-totals">
-          <div className="vaq-total">
-            <span className="vaq-total__label">Esperado</span>
-            <strong className="vaq-total__value">{formatMoneyBRLFromCents(activeTotals.expected)}</strong>
-          </div>
-          <div className="vaq-total">
-            <span className="vaq-total__label">Pago</span>
-            <strong className="vaq-total__value vaq-total__value--paid">
-              {formatMoneyBRLFromCents(activeTotals.paid)}
-            </strong>
-          </div>
-          <div className="vaq-total">
-            <span className="vaq-total__label">Pendente</span>
-            <strong className="vaq-total__value vaq-total__value--pending">
-              {formatMoneyBRLFromCents(activeTotals.pending)}
-            </strong>
-          </div>
-        </div>
-      </section>
-
-      <section className="vaq-dash vaq-dash--finished" aria-label="Dashboard finalizadas">
-        <div className="vaq-dash__head">
-          <p className="vaq-dash__eyebrow">Finalizadas</p>
-          <span className="vaq-dash__count">{finishedTotals.count}</span>
-        </div>
-        <div className="vaq-totals">
-          <div className="vaq-total">
-            <span className="vaq-total__label">Total</span>
-            <strong className="vaq-total__value">{formatMoneyBRLFromCents(finishedTotals.expected)}</strong>
-          </div>
-          <div className="vaq-total">
-            <span className="vaq-total__label">Pago</span>
-            <strong className="vaq-total__value vaq-total__value--paid">
-              {formatMoneyBRLFromCents(finishedTotals.paid)}
-            </strong>
-          </div>
-          <div className="vaq-total">
-            <span className="vaq-total__label">Concluídas</span>
-            <strong className="vaq-total__value">{finishedTotals.count}</strong>
-          </div>
-        </div>
-      </section>
-
-      {active.length > 0 ? (
-        <section className="vaq-names" aria-label="Vaquinhas em andamento">
-          <h2 className="vaq-section-title">Atuais</h2>
-          <div className="vaq-name-list">
-            {active.map((v) => (
-              <Link key={v.id} to={`/vaquinhas/${v.id}`} className="vaq-name-card">
-                <span className="vaq-name-card__title">{v.name}</span>
-                <span className="vaq-name-card__chevron" aria-hidden>
-                  ›
-                </span>
+      {active.length === 0 ? (
+        <div className="vaq-empty">Nenhuma vaquinha em andamento.</div>
+      ) : (
+        <div className="vaq-active-list">
+          {active.map((v) => {
+            const paid = vaquinhaPaidCents(v);
+            const pending = vaquinhaPendingCents(v);
+            return (
+              <Link
+                key={v.id}
+                to={`/vaquinhas/${v.id}`}
+                className="vaq-dash vaq-dash--link"
+                aria-label={`Abrir ${v.name}`}
+              >
+                <div className="vaq-dash__glow" aria-hidden />
+                <div className="vaq-dash__head">
+                  <p className="vaq-dash__eyebrow">
+                    Em andamento
+                    <span className="vaq-dash__name"> · {v.name}</span>
+                  </p>
+                  <span className="vaq-name-card__chevron" aria-hidden>
+                    ›
+                  </span>
+                </div>
+                <div className="vaq-totals">
+                  <div className="vaq-total">
+                    <span className="vaq-total__label">Esperado</span>
+                    <strong className="vaq-total__value">{formatMoneyBRLFromCents(v.totalCents)}</strong>
+                  </div>
+                  <div className="vaq-total">
+                    <span className="vaq-total__label">Pago</span>
+                    <strong className="vaq-total__value vaq-total__value--paid">
+                      {formatMoneyBRLFromCents(paid)}
+                    </strong>
+                  </div>
+                  <div className="vaq-total">
+                    <span className="vaq-total__label">Pendente</span>
+                    <strong className="vaq-total__value vaq-total__value--pending">
+                      {formatMoneyBRLFromCents(pending)}
+                    </strong>
+                  </div>
+                </div>
               </Link>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {finished.length > 0 ? (
-        <section className="vaq-names" aria-label="Vaquinhas finalizadas">
-          <h2 className="vaq-section-title">Finalizadas</h2>
-          <div className="vaq-name-list">
-            {finished.map((v) => (
-              <Link key={v.id} to={`/vaquinhas/${v.id}`} className="vaq-name-card vaq-name-card--done">
-                <span className="vaq-name-card__title">{v.name}</span>
-                <span className="vaq-name-card__badge">OK</span>
-              </Link>
-            ))}
-          </div>
-        </section>
-      ) : null}
+            );
+          })}
+        </div>
+      )}
 
       <button
         type="button"
@@ -151,6 +123,63 @@ export function Dashboard() {
           setCreateOpen(false);
         }}
       />
+
+      {finishedOpen ? (
+        <div className="vaq-modal-backdrop" role="presentation" onClick={() => setFinishedOpen(false)}>
+          <div
+            className="vaq-modal vaq-modal--sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="vaq-finished-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="vaq-modal__grab" aria-hidden />
+            <h2 id="vaq-finished-title" className="vaq-modal__title">
+              Finalizadas
+            </h2>
+            <p className="vaq-modal__text">Vaquinhas concluídas com todos os pagamentos.</p>
+            <div className="vaq-name-list">
+              {finished.map((v) => (
+                <Link
+                  key={v.id}
+                  to={`/vaquinhas/${v.id}`}
+                  className="vaq-name-card vaq-name-card--done"
+                  onClick={() => setFinishedOpen(false)}
+                >
+                  <span className="vaq-name-card__title">{v.name}</span>
+                  <span className="vaq-name-card__badge">OK</span>
+                </Link>
+              ))}
+            </div>
+            <div className="vaq-modal__actions" style={{ marginTop: 14, gridTemplateColumns: "1fr" }}>
+              <button type="button" className="vaq-btn vaq-btn--ghost" onClick={() => setFinishedOpen(false)}>
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
+  );
+}
+
+function ArchiveIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M4 7.5h16v2.2c0 .4-.3.8-.7.8H4.7c-.4 0-.7-.4-.7-.8V7.5Z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M6 10.5h12v8.2c0 .7-.6 1.3-1.3 1.3H7.3c-.7 0-1.3-.6-1.3-1.3v-8.2Z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+      <path d="M9.5 14h5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M5 5.2h14" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
   );
 }
