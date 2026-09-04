@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { VaquinhasProvider } from "./VaquinhasContext";
 import { Dashboard } from "./pages/Dashboard";
+import { VaquinhaDetail } from "./pages/VaquinhaDetail";
 import "./vaquinhas.css";
 
 function routerBasename(): string {
@@ -17,7 +18,7 @@ export function VaquinhasApp() {
           <Routes>
             <Route path="/vaquinhas" element={<Dashboard />} />
             <Route path="/vaquinhas/" element={<Dashboard />} />
-            <Route path="/vaquinhas/*" element={<Navigate to="/vaquinhas" replace />} />
+            <Route path="/vaquinhas/:id" element={<VaquinhaDetail />} />
             <Route path="*" element={<Navigate to="/vaquinhas" replace />} />
           </Routes>
         </div>

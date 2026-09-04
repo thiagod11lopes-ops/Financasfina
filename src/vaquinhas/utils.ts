@@ -1,3 +1,5 @@
+import type { Vaquinha } from "./types";
+
 export function uid(prefix = "id") {
   return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now()}`;
 }
@@ -17,6 +19,10 @@ export function parseMoneyBRLToCents(raw: string) {
   return Math.max(0, Math.round(num * 100));
 }
 
-export function pendingCents(expectedCents: number, paidCents: number) {
-  return Math.max(0, expectedCents - paidCents);
+export function vaquinhaPaidCents(v: Vaquinha) {
+  return v.people.reduce((a, p) => a + (p.status === "paid" ? v.perPersonCents : 0), 0);
+}
+
+export function vaquinhaPendingCents(v: Vaquinha) {
+  return Math.max(0, v.totalCents - vaquinhaPaidCents(v));
 }
