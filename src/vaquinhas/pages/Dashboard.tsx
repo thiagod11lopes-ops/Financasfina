@@ -78,7 +78,7 @@ export function Dashboard() {
                   >
                     <p className="vaq-dash__eyebrow">
                       Em andamento
-                      <span className="vaq-dash__name"> Â· {v.name}</span>
+                      <span className="vaq-dash__name"> - {v.name}</span>
                     </p>
                     <span className="vaq-dash__period">{formatPeriodLabel(v.period)}</span>
                   </button>

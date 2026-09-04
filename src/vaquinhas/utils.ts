@@ -61,12 +61,12 @@ export function monthLabel(month: number) {
 export function formatPeriodLabel(period: VaquinhaPeriod | undefined) {
   if (!period) return "Sem período";
   if (period.kind === "monthly") {
-    return `Mensal · ${monthLabel(period.month)}/${period.year}`;
+    return `Mensal - ${monthLabel(period.month)}/${period.year}`;
   }
   if (period.kind === "yearly") {
-    return `Anual · ${period.year}`;
+    return `Anual - ${period.year}`;
   }
-  return `${formatDateBr(period.startDateIso)} → ${formatDateBr(period.endDateIso)}`;
+  return `${formatDateBr(period.startDateIso)} - ${formatDateBr(period.endDateIso)}`;
 }
 
 export function todayIsoDate() {
