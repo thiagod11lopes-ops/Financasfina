@@ -330,66 +330,102 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const ref = doc(db, "userFinances", uid);
     let alive = true;
 
+    const applyPayload = (data: Record<string, unknown>, opts?: { force?: boolean }) => {
+      if (!alive) return;
+      if (!opts?.force && (dirtyRef.current || persistInFlightRef.current)) return;
+      if (data.payload == null) return;
+      const remoteWriteSeq =
+        typeof data.payloadWriteSeq === "number" && Number.isFinite(data.payloadWriteSeq)
+          ? data.payloadWriteSeq
+          : 0;
+      if (!opts?.force && remoteWriteSeq < lastPayloadWriteSeqRef.current) return;
+
+      const remote = reviveAppStateFromUnknown(data.payload);
+      const remoteJson = JSON.stringify(remote);
+      if (!opts?.force && remoteJson === JSON.stringify(stateRef.current)) {
+        lastPayloadWriteSeqRef.current = Math.max(lastPayloadWriteSeqRef.current, remoteWriteSeq);
+        hydratedUidRef.current = uid;
+        return;
+      }
+
+      lastPayloadWriteSeqRef.current = Math.max(lastPayloadWriteSeqRef.current, remoteWriteSeq);
+      lastPayloadRemoteJsonRef.current = remoteJson;
+      skipNextFinancePersistRef.current = true;
+      dirtyRef.current = false;
+      stateRef.current = remote;
+      setState(remote);
+      hydratedUidRef.current = uid;
+    };
+
+    const unsub = onSnapshot(
+      ref,
+      (snap) => {
+        if (!alive || !snap.exists()) return;
+        applyPayload(snap.data() as Record<string, unknown>);
+      },
+      (err) => console.error("[Finanças Firestore]", err),
+    );
+
     void (async () => {
       try {
         const serverSnap = await getDocFromServer(ref);
         if (!alive) return;
 
-        let next = emptyFinanceState();
-        let seq = 0;
-
         if (serverSnap.exists()) {
           const data = serverSnap.data() as Record<string, unknown>;
-          if (data.payload != null) {
-            next = reviveAppStateFromUnknown(data.payload);
-            seq =
-              typeof data.payloadWriteSeq === "number" && Number.isFinite(data.payloadWriteSeq)
-                ? data.payloadWriteSeq
-                : 0;
+          applyPayload(data, { force: true });
+
+          if (data.payload == null) {
+            hydratedUidRef.current = uid;
           }
+
+          const pending = readPendingCloudPayload(uid);
+          if (isAppStateEmpty(stateRef.current) && pending) {
+            skipNextFinancePersistRef.current = true;
+            dirtyRef.current = true;
+            stateRef.current = pending;
+            setState(pending);
+            hydratedUidRef.current = uid;
+            void setDoc(
+              ref,
+              {
+                version: 1,
+                payload: normalizeFinancePayload(pending),
+                updatedAt: serverTimestamp(),
+                payloadUpdatedAt: serverTimestamp(),
+                payloadWriteSeq: increment(1),
+              },
+              { merge: true },
+            )
+              .then(() => {
+                clearPendingCloudPayload(uid);
+                dirtyRef.current = false;
+              })
+              .catch((err) => console.error("[Finanças] reenvio pending", err));
+          }
+          return;
         }
 
         const pending = readPendingCloudPayload(uid);
-        if (isAppStateEmpty(next) && pending) {
-          next = pending;
-          try {
-            await setDoc(
-              ref,
-              {
-                version: 1,
-                payload: normalizeFinancePayload(next),
-                updatedAt: serverTimestamp(),
-                payloadUpdatedAt: serverTimestamp(),
-                payloadWriteSeq: increment(1),
-              },
-              { merge: true },
-            );
-            seq = Math.max(seq + 1, 1);
-            clearPendingCloudPayload(uid);
-          } catch (err) {
-            console.error("[Finanças] reenvio pending", err);
-          }
-        } else if (!serverSnap.exists()) {
-          try {
-            await setDoc(
-              ref,
-              {
-                version: 1,
-                payload: normalizeFinancePayload(next),
-                updatedAt: serverTimestamp(),
-                payloadUpdatedAt: serverTimestamp(),
-                payloadWriteSeq: increment(1),
-              },
-              { merge: true },
-            );
-            seq = 1;
-          } catch (err) {
-            console.error("[Finanças Firestore bootstrap]", err);
-          }
+        const next = pending ?? emptyFinanceState();
+        try {
+          await setDoc(
+            ref,
+            {
+              version: 1,
+              payload: normalizeFinancePayload(next),
+              updatedAt: serverTimestamp(),
+              payloadUpdatedAt: serverTimestamp(),
+              payloadWriteSeq: increment(1),
+            },
+            { merge: true },
+          );
+          if (pending) clearPendingCloudPayload(uid);
+        } catch (err) {
+          console.error("[Finanças Firestore bootstrap]", err);
         }
-
         if (!alive) return;
-        lastPayloadWriteSeqRef.current = seq;
+        lastPayloadWriteSeqRef.current = 1;
         lastPayloadRemoteJsonRef.current = JSON.stringify(next);
         skipNextFinancePersistRef.current = true;
         dirtyRef.current = false;
@@ -409,40 +445,6 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         hydratedUidRef.current = uid;
       }
     })();
-
-    const unsub = onSnapshot(
-      ref,
-      (snap) => {
-        if (!alive || !snap.exists()) return;
-        if (hydratedUidRef.current !== uid) return;
-        if (dirtyRef.current || persistInFlightRef.current) return;
-
-        const data = snap.data() as Record<string, unknown>;
-        if (data.payload == null) return;
-        const remoteWriteSeq =
-          typeof data.payloadWriteSeq === "number" && Number.isFinite(data.payloadWriteSeq)
-            ? data.payloadWriteSeq
-            : 0;
-        if (remoteWriteSeq < lastPayloadWriteSeqRef.current) return;
-
-        const remote = reviveAppStateFromUnknown(data.payload);
-        const remoteJson = JSON.stringify(remote);
-        if (remoteJson === JSON.stringify(stateRef.current)) {
-          lastPayloadWriteSeqRef.current = Math.max(lastPayloadWriteSeqRef.current, remoteWriteSeq);
-          return;
-        }
-        if (remoteWriteSeq === lastPayloadWriteSeqRef.current && remoteJson === lastPayloadRemoteJsonRef.current) {
-          return;
-        }
-
-        lastPayloadWriteSeqRef.current = Math.max(lastPayloadWriteSeqRef.current, remoteWriteSeq);
-        lastPayloadRemoteJsonRef.current = remoteJson;
-        skipNextFinancePersistRef.current = true;
-        stateRef.current = remote;
-        setState(remote);
-      },
-      (err) => console.error("[Finanças Firestore]", err),
-    );
 
     return () => {
       alive = false;

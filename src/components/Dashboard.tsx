@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useFinance } from "../context/FinanceContext";
 import {
   computeProjectedMonthBalance,
@@ -40,6 +40,8 @@ import { MonthYearPickerModal } from "./MonthYearPickerModal";
 import {
   DASH_TABS_SYNC_EVENT,
   loadDashboardTabs,
+  mergeTabsWithMonths,
+  monthsWithFinanceData,
   saveDashboardTabs,
 } from "../dashboardTabs";
 import { useUserDocCloud } from "../firebase/userDocCloud";
@@ -191,26 +193,52 @@ export function Dashboard({ visible = true }: { visible?: boolean }) {
     setExplainMetric(null);
   }, [visible]);
 
+  /** Evita gravar só o mês atual na nuvem antes de receber abas/dados do Firebase. */
+  const allowTabsCloudPushRef = useRef(false);
+  const stateMonthsRef = useRef(monthsWithFinanceData(state));
+  stateMonthsRef.current = monthsWithFinanceData(state);
+
   useEffect(() => {
     const ym = monthKey(new Date());
     setActiveKey(ym);
     setTabs((prev) => (prev.includes(ym) ? prev : [...prev, ym].sort()));
   }, []);
 
+  /** Inclui meses que já têm lançamentos no Firebase (ex.: 2026-06) na lista de abas. */
   useEffect(() => {
-    const payload = { tabs, active: activeKey };
+    const fromData = monthsWithFinanceData(state);
+    if (fromData.length === 0) return;
+    setTabs((prev) => {
+      const merged = mergeTabsWithMonths(prev, fromData);
+      if (merged.length === prev.length && merged.every((t, i) => t === prev[i])) return prev;
+      allowTabsCloudPushRef.current = true;
+      return merged;
+    });
+  }, [state.movements, state.supermarket, state.fuel, state.futureIncomes]);
+
+  useEffect(() => {
+    const months = monthsWithFinanceData(state);
+    const mergedTabs = mergeTabsWithMonths(tabs, months);
+    const payload = { tabs: mergedTabs, active: activeKey };
     saveDashboardTabs(payload);
+    if (!allowTabsCloudPushRef.current) return;
     cloud.scheduleDashboardTabsPush(payload);
-  }, [tabs, activeKey, cloud]);
+  }, [tabs, activeKey, cloud, state.movements, state.supermarket, state.fuel, state.futureIncomes]);
 
   useEffect(() => {
     const sync = () => {
       const p = loadDashboardTabs();
-      const ym = monthKey(new Date());
-      setTabs(p.tabs.includes(ym) ? p.tabs : [...p.tabs, ym].sort());
+      setTabs(mergeTabsWithMonths(p.tabs, stateMonthsRef.current));
+      allowTabsCloudPushRef.current = true;
     };
     window.addEventListener(DASH_TABS_SYNC_EVENT, sync);
-    return () => window.removeEventListener(DASH_TABS_SYNC_EVENT, sync);
+    const unlock = window.setTimeout(() => {
+      allowTabsCloudPushRef.current = true;
+    }, 3000);
+    return () => {
+      window.removeEventListener(DASH_TABS_SYNC_EVENT, sync);
+      window.clearTimeout(unlock);
+    };
   }, []);
 
   useEffect(() => {

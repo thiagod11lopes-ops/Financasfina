@@ -13,6 +13,9 @@ import { doc, getFirestore, onSnapshot, serverTimestamp, setDoc } from "firebase
 import type { AgendaData } from "../agenda/types";
 import { reviveAgendaFromUnknown, saveAgenda } from "../agenda/persist";
 import {
+  ensureCurrentMonthInTabs,
+  loadDashboardTabs,
+  mergeTabsWithMonths,
   notifyDashboardTabsSync,
   reviveDashboardTabsFromUnknown,
   saveDashboardTabs,
@@ -180,7 +183,12 @@ export function UserDocCloudProvider({ children }: { children: ReactNode }) {
 
         if (data.dashboardTabs != null && typeof data.dashboardTabs === "object") {
           const t = firestoreTimestampMs(data.dashboardTabsUpdatedAt);
-          const tabs = reviveDashboardTabsFromUnknown(data.dashboardTabs);
+          const remoteTabs = reviveDashboardTabsFromUnknown(data.dashboardTabs);
+          const existing = loadDashboardTabs();
+          const tabs = ensureCurrentMonthInTabs({
+            tabs: mergeTabsWithMonths(existing.tabs, remoteTabs.tabs),
+            active: remoteTabs.active,
+          });
           const json = JSON.stringify(tabs);
           applyRemoteField({
             snap,

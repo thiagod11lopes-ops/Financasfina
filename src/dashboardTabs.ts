@@ -22,12 +22,35 @@ export function defaultTabsPersist(): TabsPersist {
   return { tabs: [ym], active: ym };
 }
 
+/** Meses YYYY-MM presentes nos lançamentos (fluxo, mercado, combustível, etc.). */
+export function monthsWithFinanceData(state: {
+  movements: { date: string }[];
+  supermarket: { date: string }[];
+  fuel: { date: string }[];
+  futureIncomes: { expectedDate?: string }[];
+}): string[] {
+  const set = new Set<string>();
+  const add = (iso: string | undefined) => {
+    if (typeof iso === "string" && /^\d{4}-\d{2}/.test(iso)) set.add(iso.slice(0, 7));
+  };
+  for (const m of state.movements) add(m.date);
+  for (const s of state.supermarket) add(s.date);
+  for (const f of state.fuel) add(f.date);
+  for (const e of state.futureIncomes) add(e.expectedDate);
+  return [...set].sort();
+}
+
 /** Garante que o mês atual existe na lista; não força o active (usado ao sincronizar abas). */
 export function ensureCurrentMonthInTabs(data: TabsPersist): TabsPersist {
   const ym = currentMonthTab();
   const tabs = data.tabs.includes(ym) ? data.tabs : [...data.tabs, ym].sort();
   const active = tabs.includes(data.active) ? data.active : ym;
   return { tabs, active };
+}
+
+export function mergeTabsWithMonths(tabs: string[], months: string[]): string[] {
+  const ym = currentMonthTab();
+  return [...new Set([...tabs, ...months, ym])].sort();
 }
 
 export function reviveDashboardTabsFromUnknown(raw: unknown): TabsPersist {
